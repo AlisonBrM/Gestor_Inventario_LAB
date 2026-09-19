@@ -1,38 +1,82 @@
+# AGENTS.md
 
 ## Contexto
 
-Estás desarrollando un Sistema de Información para préstamos en un Laboratorio en una Universidad
+Sistema de Información para gestionar los préstamos de un laboratorio universitario.
 
-## Stack Tecnológico
+## Stack
 
-### Frontend 
-React sobre Javascript
-Es importante que se entregue un frontend limpio y minimalista, sin profundidad de desarrollo ni sobre complejidad técnica, utilizado especialmente para probar las funcionalidades realizadas
+| Capa | Tecnología | Requisitos |
+|---|---|---|
+| Frontend | React + JavaScript | Limpio y minimalista. Su único fin es probar las funcionalidades del backend: sin sobreingeniería ni complejidad técnica. |
+| Backend | Python + FastAPI, sobre `venv` | Arquitectura por capas estándar de FastAPI (ver más abajo). |
+| Base de datos | MySQL en Docker | Servicio Docker consumido por el backend, con volumen para persistir datos entre ejecuciones. |
+| Pruebas | pytest | Solo backend. Mocks para repositorios y dependencias no críticas. |
 
-### Backend
-Python (FastAPI)
-Se utilizará Python como lenguaje para el backend, sobre un venv, así como la arquitectura estándar de backend para proyectos FastAPI:
+## Estructura del backend
 
+Si el repositorio ya tiene una estructura, respétala. Si no, usa esta:
 
-### Base de Datos
-MySQL (Docker)
-Se expondrá un servicio docker de MySQL para que sea consumido por el backend, este debe tener un volumen y persistir entre lanzamientos
+```
+backend/
+├── app/
+│   ├── main.py
+│   ├── core/          # configuración y conexión a BD
+│   ├── models/        # modelos de datos (ORM)
+│   ├── schemas/       # DTOs (Pydantic)
+│   ├── repositories/  # acceso a datos, sin reglas de negocio
+│   ├── services/      # reglas y validaciones de negocio
+│   └── routers/       # endpoints, delgados: solo delegan en services
+├── migrations/
+└── tests/
+```
 
-## Documentos Importantes
+## Documentos de referencia
 
-Los siguientes documentos se encuentran en la carpeta raíz del repositorio, y los utilizarás como guía para el proceso de desarrollo de funcionalidades
+Están en la raíz del repositorio. Consúltalos antes de planificar cualquier funcionalidad. Si lo solicitado contradice alguno, avisa al usuario antes de continuar.
 
-- ADR.md: Registro de las decisiones de arquitectura realizadas con el formato estándar de las ADR, el ADR #1 por instrucción será el modelo de IA a usar, no tener en cuenta.
-- ASSUMPTIONS.md: Registro de las suposiciones realizadas para el desarrollo del sistema, como reglas de negocio o reglas de funcionamiento.
-- MODELS.md: Registro del modelo de clases esperado para el sistema, cada uno con la definición de los campos que tiene, y su explicación.
+| Documento | Contenido | Notas |
+|---|---|---|
+| `ADR.md` | Decisiones de arquitectura (formato ADR estándar). | Ignora el ADR #1 (modelo de IA a usar). |
+| `ASSUMPTIONS.md` | Suposiciones, reglas de negocio y reglas de funcionamiento. | Solo se modifica cuando el usuario lo indique de forma explícita. |
+| `MODELS.md` | Modelo de clases esperado: campos y su explicación. | Referencia para los modelos de datos. |
 
-## Proceso de Desarrollo de funcionalidades
+## Flujo de desarrollo por funcionalidad
 
-1. Definición de la funcionalidad a realizar: Se te definirá una funcionalidad, o en su defecto, un conjunto de funcionalidades relacionadas. Se te describirá qué se pretende hacer, qué reglas o validaciones de negocio posee, y demás información que pueda ser importante (contratos, requerimientos especiales, limitaciones, etc). Con este conjunto de funcionalidades crearás el plan de implementación
-2. Definición del alcance de la funcionalidad: Primeramente, debes definir cuál será el alcance de la funcionalidad: sus limitaciones, sus reglas de validación, y será el espacio para resolver dudas: no puedes asumir reglas de validación, debes de preguntarlas al usuario, con incluso el caso de que se deban definir en ASSUMPTIONS.md (no debes registrar suposiciones si no se te indica)
-3. Definición de los contratos: La comunicación frontend <-> backend debe hacerse mediante una API REST con JSON, por lo que debes definir el contrato de el/los DTO(s) y endpoint(s) para la(s) funcionalidad(es) requeridas.
-4. Definición de las reglas de negocio: Debes consolidar las reglas y validaciones de negocio que aplicarás en esta(s) funcionalidad(es)
-5. Definición de las pruebas unitarias: Las validaciones de dominio deben llevar pruebas unitarias correctamente utilizadas con pytest y mocks adecuados de las dependencias no críticas para la validación de un service (repositorios de acceso a datos). Este será el conjunto de pruebas que deberás implementar en backend
-6. Implementación backend: Procederás a implementar el código backend, siguiendo principios de código limpio y eficiente, se espera la implementación de los modelos de datos relacionados, las migraciones a base de datos, repositorios, servicios con reglas de negocio según el paso 4 y pruebas unitarias según el plan definido en el paso 5, y endpoints según el contrato definido en el paso 3. Terminarás exponiendo los contratos de la API.
-7. Implementación frontend: Procederás a implementar las interfaces necesarias para probar los endpoints desarrollados en el paso 6, utilizando React con JavaScript
-8. Pruebas: las pruebas se realizarán manualmente contra frontend, por lo que deberás mantener actualizada la documentación del README.md
+El usuario define una funcionalidad o un conjunto de funcionalidades relacionadas: qué se pretende, reglas de negocio, contratos, requerimientos especiales y limitaciones. Con eso, sigue estos pasos en orden.
+
+### Fase 1: Planificación (pasos 1 a 4)
+
+1. **Alcance.** Define el alcance, las limitaciones y las reglas de validación. Todo lo que no esté especificado se pregunta al usuario; nunca se asume.
+2. **Contratos.** La comunicación frontend ↔ backend es una API REST con JSON. Define los DTOs y endpoints (método, ruta, request, response y errores).
+3. **Reglas de negocio.** Consolida en una lista las reglas y validaciones que se aplicarán.
+4. **Plan de pruebas.** Define las pruebas unitarias con pytest para las validaciones de dominio de los services. Mockea los repositorios y demás dependencias no críticas.
+
+> **Punto de control:** presenta al usuario el resultado de la Fase 1 y espera su confirmación antes de implementar.
+
+### Fase 2: Implementación (pasos 5 y 6)
+
+5. **Backend.** Implementa con código limpio y eficiente, en este orden:
+   modelos de datos → migraciones → repositorios → services (reglas del paso 3) → pruebas unitarias (plan del paso 4) → endpoints (contrato del paso 2).
+   Al terminar, deja los contratos expuestos en la API.
+6. **Frontend.** Implementa las interfaces mínimas necesarias para probar los endpoints del paso 5, con React y JavaScript.
+
+### Fase 3: Verificación (paso 7)
+
+7. **Pruebas manuales.** El usuario prueba manualmente contra el frontend. Mantén `README.md` actualizado: cómo levantar el entorno (venv, Docker, backend, frontend), y las funcionalidades nuevas con sus endpoints y cómo probarlas.
+
+## Reglas transversales
+
+- No asumas reglas de negocio ni de validación: pregúntalas.
+- No registres suposiciones en `ASSUMPTIONS.md` si el usuario no lo indica.
+- Las reglas de negocio viven en los services; los routers no las contienen.
+- Las validaciones de dominio siempre llevan pruebas unitarias.
+
+## Checklist de entrega
+
+- [ ] Alcance, contratos, reglas y plan de pruebas confirmados por el usuario
+- [ ] Modelos y migraciones creados; la BD persiste entre lanzamientos
+- [ ] Services con reglas de negocio y pruebas pytest pasando
+- [ ] Endpoints según el contrato acordado
+- [ ] Frontend mínimo que permite probar cada endpoint
+- [ ] `README.md` actualizado

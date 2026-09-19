@@ -1,8 +1,10 @@
+from datetime import date
 from typing import Optional, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.devolucion import Devolucion
+from app.models.equipo import Equipo
 from app.models.prestamo import Prestamo
 
 
@@ -17,6 +19,41 @@ class PrestamoRepository:
         return self.db.execute(
             select(Prestamo).where(Prestamo.id == prestamo_id)
         ).scalar_one_or_none()
+
+    def listar(
+        self,
+        id_categoria: Optional[int] = None,
+        fecha_desde: Optional[date] = None,
+        fecha_hasta: Optional[date] = None,
+        estado: Optional[str] = None,
+        fecha_referencia: Optional[date] = None,
+    ) -> Sequence[Prestamo]:
+        """Retorna una lista de préstamos aplicando filtros de categoría, fecha y estado."""
+        ref_date = fecha_referencia or date.today()
+        stmt = (
+            select(Prestamo)
+            .join(Equipo, Prestamo.id_equipo == Equipo.id)
+            .outerjoin(Devolucion, Prestamo.id == Devolucion.id_prestamo)
+        )
+        if id_categoria is not None:
+            stmt = stmt.where(Equipo.id_categoria == id_categoria)
+        if fecha_desde is not None:
+            stmt = stmt.where(Prestamo.fecha_prestamo >= fecha_desde)
+        if fecha_hasta is not None:
+            stmt = stmt.where(Prestamo.fecha_prestamo <= fecha_hasta)
+        if estado == "vigente":
+            stmt = stmt.where(
+                Devolucion.id_prestamo.is_(None),
+                Prestamo.fecha_devolucion_esperada >= ref_date,
+            )
+        elif estado == "vencido":
+            stmt = stmt.where(
+                Devolucion.id_prestamo.is_(None),
+                Prestamo.fecha_devolucion_esperada < ref_date,
+            )
+
+        stmt = stmt.order_by(Prestamo.fecha_prestamo.desc(), Prestamo.id.desc())
+        return self.db.execute(stmt).scalars().all()
 
     def get_prestamos_no_devueltos_por_persona(self, cedula: str) -> Sequence[Prestamo]:
         """Obtiene todos los préstamos de una persona que no han sido devueltos."""

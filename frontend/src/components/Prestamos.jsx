@@ -3,24 +3,34 @@ import { useState, useEffect } from 'react';
 export default function Prestamos() {
   const [personas, setPersonas] = useState([]);
   const [equipos, setEquipos] = useState([]);
+  const [categorias, setCategorias] = useState([]);
+  const [prestamos, setPrestamos] = useState([]);
   const [loadingDatos, setLoadingDatos] = useState(false);
+  const [loadingPrestamos, setLoadingPrestamos] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [mensaje, setMensaje] = useState(null); // { tipo: 'success' | 'error', texto: string }
   const [prestamoCreado, setPrestamoCreado] = useState(null);
 
-  // Formulario
+  // Formulario de creación
   const hoyStr = new Date().toISOString().split('T')[0];
   const [cedulaPersona, setCedulaPersona] = useState('');
   const [idEquipo, setIdEquipo] = useState('');
   const [fechaPrestamo, setFechaPrestamo] = useState(hoyStr);
 
-  // Cargar personas y equipos para facilitar la prueba
+  // Filtros de listado
+  const [filtroCategoria, setFiltroCategoria] = useState('');
+  const [filtroFechaDesde, setFiltroFechaDesde] = useState('');
+  const [filtroFechaHasta, setFiltroFechaHasta] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState('');
+
+  // Cargar opciones para formulario y filtros
   const cargarOpciones = async () => {
     setLoadingDatos(true);
     try {
-      const [resPersonas, resEquipos] = await Promise.all([
+      const [resPersonas, resEquipos, resCategorias] = await Promise.all([
         fetch('/api/personas?solo_activas=true'),
         fetch('/api/equipos?solo_activos=true'),
+        fetch('/api/categorias?solo_activas=true'),
       ]);
 
       if (resPersonas.ok) {
@@ -38,6 +48,11 @@ export default function Prestamos() {
           setIdEquipo(dataE[0].id);
         }
       }
+
+      if (resCategorias.ok) {
+        const dataC = await resCategorias.json();
+        setCategorias(dataC);
+      }
     } catch (err) {
       console.error('Error al cargar opciones:', err);
     } finally {
@@ -45,9 +60,54 @@ export default function Prestamos() {
     }
   };
 
+  // Cargar lista de préstamos con filtros
+  const cargarPrestamos = async () => {
+    if (filtroFechaDesde && filtroFechaHasta && filtroFechaDesde > filtroFechaHasta) {
+      setMensaje({
+        tipo: 'error',
+        texto: 'La fecha inicial ("Desde") no puede ser posterior a la fecha final ("Hasta").',
+      });
+      return;
+    }
+
+    setLoadingPrestamos(true);
+    try {
+      const params = new URLSearchParams();
+      if (filtroCategoria) params.append('id_categoria', filtroCategoria);
+      if (filtroFechaDesde) params.append('fecha_desde', filtroFechaDesde);
+      if (filtroFechaHasta) params.append('fecha_hasta', filtroFechaHasta);
+      if (filtroEstado) params.append('estado', filtroEstado);
+
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      const res = await fetch(`/api/prestamos${qs}`);
+      const data = await res.json().catch(() => []);
+
+      if (!res.ok) {
+        throw new Error(data.detail || 'Error al cargar los préstamos.');
+      }
+
+      setPrestamos(data);
+    } catch (err) {
+      setMensaje({ tipo: 'error', texto: err.message || 'Error de conexión al obtener préstamos.' });
+    } finally {
+      setLoadingPrestamos(false);
+    }
+  };
+
   useEffect(() => {
     cargarOpciones();
   }, []);
+
+  useEffect(() => {
+    cargarPrestamos();
+  }, [filtroCategoria, filtroFechaDesde, filtroFechaHasta, filtroEstado]);
+
+  const limpiarFiltros = () => {
+    setFiltroCategoria('');
+    setFiltroFechaDesde('');
+    setFiltroFechaHasta('');
+    setFiltroEstado('');
+  };
 
   const handleCrearPrestamo = async (e) => {
     e.preventDefault();
@@ -90,8 +150,9 @@ export default function Prestamos() {
         tipo: 'success',
         texto: `¡Préstamo #${data.id} creado con éxito! Fecha esperada de devolución: ${data.fecha_devolucion_esperada}`,
       });
-      // Recargar opciones para actualizar posibles cambios
+      // Recargar opciones y listado de préstamos
       cargarOpciones();
+      cargarPrestamos();
     } catch (err) {
       setMensaje({ tipo: 'error', texto: err.message || 'Error de conexión con el servidor.' });
     } finally {
@@ -236,6 +297,136 @@ export default function Prestamos() {
           </div>
         </div>
       )}
+
+      {/* Listado y Filtros de Préstamos */}
+      <div className="card table-card" style={{ marginTop: '1.5rem' }}>
+        <div className="table-header">
+          <h3>📋 Historial de Préstamos ({prestamos.length})</h3>
+          <div className="table-controls" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
+            {/* Filtro por Categoría */}
+            <select
+              value={filtroCategoria}
+              onChange={(e) => setFiltroCategoria(e.target.value)}
+              aria-label="Filtrar por categoría"
+            >
+              <option value="">Todas las categorías</option>
+              {categorias.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
+                </option>
+              ))}
+            </select>
+
+            {/* Filtro por Fecha Desde */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <small style={{ color: '#64748b' }}>Desde:</small>
+              <input
+                type="date"
+                value={filtroFechaDesde}
+                onChange={(e) => setFiltroFechaDesde(e.target.value)}
+                style={{ padding: '0.4rem 0.6rem', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '0.85rem' }}
+                aria-label="Fecha desde"
+              />
+            </div>
+
+            {/* Filtro por Fecha Hasta */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <small style={{ color: '#64748b' }}>Hasta:</small>
+              <input
+                type="date"
+                value={filtroFechaHasta}
+                onChange={(e) => setFiltroFechaHasta(e.target.value)}
+                style={{ padding: '0.4rem 0.6rem', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '0.85rem' }}
+                aria-label="Fecha hasta"
+              />
+            </div>
+
+            {/* Filtro por Estado */}
+            <select
+              value={filtroEstado}
+              onChange={(e) => setFiltroEstado(e.target.value)}
+              aria-label="Filtrar por estado"
+            >
+              <option value="">Todos los estados</option>
+              <option value="vigente">🟢 Vigente</option>
+              <option value="vencido">🔴 Vencido</option>
+            </select>
+
+            {/* Botón limpiar */}
+            {(filtroCategoria || filtroFechaDesde || filtroFechaHasta || filtroEstado) && (
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={limpiarFiltros}
+                title="Limpiar filtros"
+              >
+                ✕ Limpiar
+              </button>
+            )}
+
+            {/* Botón actualizar */}
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={cargarPrestamos}
+              disabled={loadingPrestamos}
+            >
+              🔄 {loadingPrestamos ? 'Cargando...' : 'Actualizar'}
+            </button>
+          </div>
+        </div>
+
+        {loadingPrestamos ? (
+          <p>Cargando préstamos...</p>
+        ) : prestamos.length === 0 ? (
+          <p className="empty-message">No se encontraron préstamos con los criterios seleccionados.</p>
+        ) : (
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th># ID</th>
+                  <th>Solicitante</th>
+                  <th>Equipo</th>
+                  <th>Categoría</th>
+                  <th>Fecha Préstamo</th>
+                  <th>Fecha Devolución Esperada</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prestamos.map((p) => (
+                  <tr key={p.id}>
+                    <td><strong>#{p.id}</strong></td>
+                    <td>
+                      <div>{p.nombre_persona || 'N/A'}</div>
+                      <small style={{ color: '#64748b' }}>C.C. {p.cedula_persona}</small>
+                    </td>
+                    <td>
+                      <div>{p.nombre_equipo || `Equipo #${p.id_equipo}`}</div>
+                      <small style={{ color: '#64748b' }}>Sec: {p.secuencial_equipo || 'S/N'}</small>
+                    </td>
+                    <td>{p.nombre_categoria || '-'}</td>
+                    <td>{p.fecha_prestamo}</td>
+                    <td>{p.fecha_devolucion_esperada}</td>
+                    <td>
+                      {p.estado === 'vigente' && (
+                        <span className="badge badge-active">🟢 Vigente</span>
+                      )}
+                      {p.estado === 'vencido' && (
+                        <span className="badge badge-danger">🔴 Vencido</span>
+                      )}
+                      {p.estado === 'devuelto' && (
+                        <span className="badge badge-inactive">⚪ Devuelto</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

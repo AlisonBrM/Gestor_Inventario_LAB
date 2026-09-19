@@ -438,3 +438,140 @@ def test_obtener_prestamo_por_id_inexistente(service, mock_prestamo_repo):
 
     with pytest.raises(PrestamoNotFoundError):
         service.obtener_prestamo_por_id(999)
+
+
+# =========================================================================
+# 8. Listar Préstamos con Filtros (RN-PREST-LIST-01 a 05)
+# =========================================================================
+
+def test_listar_prestamos_sin_filtros(service, mock_prestamo_repo):
+    """Verifica listar préstamos sin ningún filtro."""
+    p1 = Prestamo(id=1, cedula_persona="1001", id_equipo=1, fecha_prestamo=date.today(), fecha_devolucion_esperada=date.today())
+    p2 = Prestamo(id=2, cedula_persona="1002", id_equipo=2, fecha_prestamo=date.today(), fecha_devolucion_esperada=date.today())
+    mock_prestamo_repo.listar.return_value = [p2, p1]
+
+    resultado = service.listar_prestamos()
+
+    mock_prestamo_repo.listar.assert_called_once_with(
+        id_categoria=None,
+        fecha_desde=None,
+        fecha_hasta=None,
+        estado=None,
+    )
+    assert len(resultado) == 2
+    assert resultado[0].id == 2
+
+
+def test_listar_prestamos_filtro_categoria(service, mock_prestamo_repo):
+    """Verifica listar préstamos filtrando por categoría."""
+    mock_prestamo_repo.listar.return_value = []
+
+    resultado = service.listar_prestamos(id_categoria=3)
+
+    mock_prestamo_repo.listar.assert_called_once_with(
+        id_categoria=3,
+        fecha_desde=None,
+        fecha_hasta=None,
+        estado=None,
+    )
+    assert resultado == []
+
+
+def test_listar_prestamos_filtro_rango_fechas_valido(service, mock_prestamo_repo):
+    """RN-PREST-LIST-01: Verifica rango de fechas válido fecha_desde <= fecha_hasta."""
+    f_desde = date(2026, 9, 1)
+    f_hasta = date(2026, 9, 15)
+    mock_prestamo_repo.listar.return_value = []
+
+    service.listar_prestamos(fecha_desde=f_desde, fecha_hasta=f_hasta)
+
+    mock_prestamo_repo.listar.assert_called_once_with(
+        id_categoria=None,
+        fecha_desde=f_desde,
+        fecha_hasta=f_hasta,
+        estado=None,
+    )
+
+
+def test_listar_prestamos_error_rango_fechas_invalido(service, mock_prestamo_repo):
+    """RN-PREST-LIST-01: Rechaza fecha_desde posterior a fecha_hasta."""
+    f_desde = date(2026, 9, 20)
+    f_hasta = date(2026, 9, 10)
+
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.listar_prestamos(fecha_desde=f_desde, fecha_hasta=f_hasta)
+
+    assert "no puede ser posterior a la fecha final" in str(exc_info.value)
+    mock_prestamo_repo.listar.assert_not_called()
+
+
+def test_listar_prestamos_filtro_estado_vigente(service, mock_prestamo_repo):
+    """RN-PREST-LIST-02: Filtra por estado 'vigente' normalizado."""
+    mock_prestamo_repo.listar.return_value = []
+
+    service.listar_prestamos(estado="Vigente ")
+
+    mock_prestamo_repo.listar.assert_called_once_with(
+        id_categoria=None,
+        fecha_desde=None,
+        fecha_hasta=None,
+        estado="vigente",
+    )
+
+
+def test_listar_prestamos_filtro_estado_vencido(service, mock_prestamo_repo):
+    """RN-PREST-LIST-02: Filtra por estado 'vencido' normalizado."""
+    mock_prestamo_repo.listar.return_value = []
+
+    service.listar_prestamos(estado=" VENCIDO")
+
+    mock_prestamo_repo.listar.assert_called_once_with(
+        id_categoria=None,
+        fecha_desde=None,
+        fecha_hasta=None,
+        estado="vencido",
+    )
+
+
+def test_listar_prestamos_error_estado_invalido(service, mock_prestamo_repo):
+    """RN-PREST-LIST-02: Rechaza estados no válidos."""
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.listar_prestamos(estado="otro_estado")
+
+    assert "El estado debe ser 'vigente' o 'vencido'" in str(exc_info.value)
+    mock_prestamo_repo.listar.assert_not_called()
+
+
+def test_listar_prestamos_error_id_categoria_invalido(service, mock_prestamo_repo):
+    """RN-PREST-LIST-03: Rechaza id_categoria <= 0."""
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.listar_prestamos(id_categoria=0)
+
+    assert "entero positivo" in str(exc_info.value)
+
+    with pytest.raises(PrestamoValidationError) as exc_info2:
+        service.listar_prestamos(id_categoria=-5)
+
+    assert "entero positivo" in str(exc_info2.value)
+    mock_prestamo_repo.listar.assert_not_called()
+
+
+def test_listar_prestamos_combinacion_filtros(service, mock_prestamo_repo):
+    """Verifica la combinación simultánea de filtros."""
+    f_desde = date(2026, 9, 1)
+    f_hasta = date(2026, 9, 30)
+    mock_prestamo_repo.listar.return_value = []
+
+    service.listar_prestamos(
+        id_categoria=2,
+        fecha_desde=f_desde,
+        fecha_hasta=f_hasta,
+        estado="vigente",
+    )
+
+    mock_prestamo_repo.listar.assert_called_once_with(
+        id_categoria=2,
+        fecha_desde=f_desde,
+        fecha_hasta=f_hasta,
+        estado="vigente",
+    )

@@ -146,3 +146,66 @@ def test_endpoint_obtener_prestamo_no_encontrado_404(mock_service):
     response = client.get("/api/prestamos/99")
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+# =========================================================================
+# Pruebas del Endpoint GET /api/prestamos (Listar con filtros)
+# =========================================================================
+
+def test_endpoint_listar_prestamos_exito_200(mock_service):
+    """Verifica que GET /api/prestamos retorne 200 y la lista de préstamos."""
+    hoy = date.today()
+    mock_service.listar_prestamos.return_value = [
+        Prestamo(
+            id=1,
+            cedula_persona="1001234567",
+            id_equipo=1,
+            fecha_prestamo=hoy,
+            fecha_devolucion_esperada=hoy + timedelta(days=10),
+        )
+    ]
+
+    response = client.get("/api/prestamos")
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["id"] == 1
+    assert data[0]["estado"] == "vigente"
+    assert data[0]["devuelto"] is False
+    mock_service.listar_prestamos.assert_called_once_with(
+        id_categoria=None,
+        fecha_desde=None,
+        fecha_hasta=None,
+        estado=None,
+    )
+
+
+def test_endpoint_listar_prestamos_con_query_params(mock_service):
+    """Verifica que los query params se transfieran correctamente al servicio."""
+    mock_service.listar_prestamos.return_value = []
+
+    response = client.get(
+        "/api/prestamos?id_categoria=2&fecha_desde=2026-09-01&fecha_hasta=2026-09-30&estado=vigente"
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    mock_service.listar_prestamos.assert_called_once_with(
+        id_categoria=2,
+        fecha_desde=date(2026, 9, 1),
+        fecha_hasta=date(2026, 9, 30),
+        estado="vigente",
+    )
+
+
+def test_endpoint_listar_prestamos_error_validacion_400(mock_service):
+    """Verifica que un PrestamoValidationError del servicio retorne 400 Bad Request."""
+    mock_service.listar_prestamos.side_effect = PrestamoValidationError(
+        "La fecha inicial ('fecha_desde') no puede ser posterior a la fecha final ('fecha_hasta')."
+    )
+
+    response = client.get("/api/prestamos?fecha_desde=2026-09-20&fecha_hasta=2026-09-10")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "no puede ser posterior" in response.json()["detail"]

@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import date
+from typing import Optional, Sequence
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -48,6 +50,46 @@ def crear_prestamo(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(err),
         ) from err
+    except PrestamoValidationError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(err),
+        ) from err
+
+
+@router.get(
+    "",
+    response_model=list[PrestamoResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Listar préstamos con filtros",
+)
+def listar_prestamos(
+    id_categoria: Optional[int] = Query(
+        None,
+        description="Filtrar por ID de la categoría",
+    ),
+    fecha_desde: Optional[date] = Query(
+        None,
+        description="Fecha inicial del rango (aplica a fecha_prestamo)",
+    ),
+    fecha_hasta: Optional[date] = Query(
+        None,
+        description="Fecha final del rango (aplica a fecha_prestamo)",
+    ),
+    estado: Optional[str] = Query(
+        None,
+        description="Filtrar por estado: 'vigente' o 'vencido'",
+    ),
+    service: PrestamoService = Depends(get_prestamo_service),
+) -> Sequence[PrestamoResponse]:
+    """Retorna la lista de préstamos aplicando los filtros opcionales."""
+    try:
+        return service.listar_prestamos(
+            id_categoria=id_categoria,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+            estado=estado,
+        )
     except PrestamoValidationError as err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

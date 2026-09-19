@@ -185,6 +185,7 @@ La aplicación estará disponible en [http://localhost:5173](http://localhost:51
 | Método | Ruta | Parámetros / Body | Descripción | Códigos de Respuesta |
 |---|---|---|---|---|
 | `POST` | `/api/prestamos` | Body JSON: `PrestamoCreate` | Registra un nuevo préstamo validando reglas de negocio (solicitante sin préstamos vencidos, equipo operativo, etc.) y calcula la fecha de devolución esperada | `201 Created`, `400 Bad Request`, `404 Not Found`, `422 Unprocessable Content` |
+| `GET` | `/api/prestamos` | Query:<br>- `id_categoria={id}` (opcional)<br>- `fecha_desde={YYYY-MM-DD}` (opcional)<br>- `fecha_hasta={YYYY-MM-DD}` (opcional)<br>- `estado={vigente/vencido}` (opcional) | Lista todos los préstamos registrados aplicando los filtros opcionales de categoría, rango de fechas y estado | `200 OK`, `400 Bad Request` |
 | `GET` | `/api/prestamos/{id}` | Path: `id` (entero) | Retorna los datos detallados de un préstamo por su ID | `200 OK`, `404 Not Found` |
 
 ---
@@ -291,3 +292,10 @@ Abre [http://localhost:5173](http://localhost:5173) en el navegador. La aplicaci
   - **Equipo ya prestado:** Intenta prestar un equipo que ya fue asignado en un préstamo activo no devuelto; el sistema impedirá el préstamo duplicado.
   - **Persona o Equipo inactivo:** Si se ingresa la cédula de una persona inactiva o se intenta prestar un equipo inactivo, el sistema rechazará la operación.
   - **Fecha futura:** Si se ingresa una fecha posterior al día actual, el sistema lo rechazará indicando que no se admiten fechas futuras.
+- **Listar Préstamos con Filtros:**
+  - En la parte inferior de la pestaña **📋 Préstamos**, observa la tabla **Historial de Préstamos**.
+  - **Filtrar por Categoría:** Selecciona una categoría en el menú desplegable. La tabla se actualizará mostrando únicamente los préstamos de equipos asociados a esa categoría.
+  - **Filtrar por Rango de Fechas:** Ingresa una fecha en el campo **Desde** y/o en el campo **Hasta** para filtrar por la fecha en que se inició el préstamo (`fecha_prestamo`). Nota: Si intentas colocar una fecha "Desde" posterior a "Hasta", se mostrará un mensaje de validación.
+  - **Filtrar por Estado:** Selecciona `🟢 Vigente` (préstamos activos cuya fecha límite aún no vence) o `🔴 Vencido` (préstamos activos cuya fecha esperada de devolución ya pasó) o `Todos los estados` (para incluir todos, incluso si hay devueltos).
+  - **Limpiar Filtros:** Haz clic en el botón **✕ Limpiar** para restablecer todos los filtros a sus valores por defecto.
+  - **Refresco Automático:** Al registrar un nuevo préstamo, la tabla se actualiza automáticamente mostrando el nuevo registro en la parte superior.

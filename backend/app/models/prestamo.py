@@ -53,6 +53,14 @@ class Prestamo(Base):
     def nombre_categoria(self) -> str | None:
         return self.equipo.nombre_categoria if self.equipo else None
 
+    @property
+    def estado(self) -> str:
+        if self.devuelto:
+            return "devuelto"
+        if self.fecha_devolucion_esperada < date.today():
+            return "vencido"
+        return "vigente"
+
     def __repr__(self) -> str:
         return (
             f"<Prestamo(id={self.id}, cedula_persona='{self.cedula_persona}', "

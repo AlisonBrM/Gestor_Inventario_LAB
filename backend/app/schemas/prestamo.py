@@ -47,5 +47,7 @@ class PrestamoResponse(BaseModel):
     nombre_categoria: Optional[str] = None
     fecha_prestamo: date
     fecha_devolucion_esperada: date
+    devuelto: bool = False
+    estado: str = "vigente"
 
     model_config = ConfigDict(from_attributes=True)

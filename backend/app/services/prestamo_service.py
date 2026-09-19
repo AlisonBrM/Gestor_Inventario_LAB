@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-from typing import Optional
+from typing import Optional, Sequence
 
 from app.models.prestamo import Prestamo
 from app.repositories.categoria_repository import CategoriaRepository
@@ -50,6 +50,48 @@ class PrestamoService:
         if not prestamo:
             raise PrestamoNotFoundError(prestamo_id)
         return prestamo
+
+    def listar_prestamos(
+        self,
+        id_categoria: Optional[int] = None,
+        fecha_desde: Optional[date] = None,
+        fecha_hasta: Optional[date] = None,
+        estado: Optional[str] = None,
+    ) -> Sequence[Prestamo]:
+        """Retorna la lista de préstamos aplicando los filtros y validaciones de dominio.
+
+        Reglas aplicadas:
+        - RN-PREST-LIST-01: Si se envían fecha_desde y fecha_hasta, fecha_desde <= fecha_hasta.
+        - RN-PREST-LIST-02: Si se envía estado, debe ser 'vigente' o 'vencido'.
+        - RN-PREST-LIST-03: Si se envía id_categoria, debe ser un entero positivo (> 0).
+        """
+        # RN-PREST-LIST-01: Validación de rango de fechas
+        if fecha_desde is not None and fecha_hasta is not None and fecha_desde > fecha_hasta:
+            raise PrestamoValidationError(
+                "La fecha inicial ('fecha_desde') no puede ser posterior a la fecha final ('fecha_hasta')."
+            )
+
+        # RN-PREST-LIST-02: Validación de estado
+        estado_normalizado = None
+        if estado is not None:
+            estado_normalizado = estado.strip().lower()
+            if estado_normalizado not in ("vigente", "vencido"):
+                raise PrestamoValidationError(
+                    "El estado debe ser 'vigente' o 'vencido'."
+                )
+
+        # RN-PREST-LIST-03: Validación de categoría
+        if id_categoria is not None and id_categoria <= 0:
+            raise PrestamoValidationError(
+                "El ID de la categoría debe ser un número entero positivo."
+            )
+
+        return self.prestamo_repository.listar(
+            id_categoria=id_categoria,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+            estado=estado_normalizado,
+        )
 
     def crear_prestamo(self, datos: PrestamoCreate) -> Prestamo:
         """Crea un nuevo préstamo aplicando todas las reglas de negocio.

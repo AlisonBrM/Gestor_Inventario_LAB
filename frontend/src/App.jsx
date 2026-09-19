@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
+import Categorias from './components/Categorias';
 
 function App() {
   const [backendStatus, setBackendStatus] = useState('Verificando conexión...');
-  const [loading, setLoading] = useState(true);
+  const [isHealthy, setIsHealthy] = useState(false);
 
   useEffect(() => {
     fetch('/api/health')
@@ -12,22 +13,29 @@ function App() {
       })
       .then((data) => {
         setBackendStatus(`Conectado al backend: ${data.app} (v${data.version})`);
-        setLoading(false);
+        setIsHealthy(true);
       })
-      .catch((err) => {
+      .catch(() => {
         setBackendStatus('No se pudo conectar al backend (¿está corriendo en el puerto 8000?)');
-        setLoading(false);
+        setIsHealthy(false);
       });
   }, []);
 
   return (
-    <div>
-      <h1>Sistema de Gestión de Laboratorio</h1>
-      <p>Esqueleto de Frontend minimalista para pruebas de API</p>
-      <div className="card">
-        <h2>Estado de Backend</h2>
-        <p className="status-badge">{backendStatus}</p>
-      </div>
+    <div className="app-layout">
+      <header className="app-header">
+        <h1>Sistema de Gestión de Préstamos - Laboratorio</h1>
+        <p className="subtitle">Módulo de Administración de Inventario</p>
+        <div className="status-container">
+          <span className={`status-badge ${isHealthy ? 'status-online' : 'status-offline'}`}>
+            {backendStatus}
+          </span>
+        </div>
+      </header>
+
+      <main className="app-main">
+        <Categorias />
+      </main>
     </div>
   );
 }

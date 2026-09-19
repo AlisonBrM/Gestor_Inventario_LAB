@@ -144,10 +144,47 @@ La aplicación estará disponible en [http://localhost:5173](http://localhost:51
 
 ---
 
-## Endpoints Base Disponibles
+## Endpoints Disponibles
 
+### Base y Diagnóstico
 | Método | Ruta | Descripción |
 |---|---|---|
 | `GET` | `/` | Información general de la API y estado de ejecución |
 | `GET` | `/api/health` | Verificación de salud (Health check) |
-| `GET` | `/docs` | Documentación interactiva OpenAPI (Swagger) |
+| `GET` | `/docs` | Documentación interactiva OpenAPI (Swagger UI) |
+| `GET` | `/redoc` | Documentación ReDoc |
+
+### Módulo de Categorías (`/api/categorias`)
+| Método | Ruta | Parámetros / Body | Descripción | Códigos de Respuesta |
+|---|---|---|---|---|
+| `POST` | `/api/categorias` | Body JSON: `CategoriaCreate` | Crea una nueva categoría con nombre y plazo de entrega | `201 Created`, `400 Bad Request` |
+| `GET` | `/api/categorias` | Query: `solo_activas=true` (opcional) | Lista las categorías registradas | `200 OK` |
+| `GET` | `/api/categorias/{id}` | Path: `id` (entero) | Retorna los detalles de una categoría | `200 OK`, `404 Not Found` |
+| `PUT` | `/api/categorias/{id}` | Path: `id`, Body JSON: `CategoriaUpdate` | Actualiza los datos de una categoría | `200 OK`, `400 Bad Request`, `404 Not Found` |
+| `DELETE` | `/api/categorias/{id}` | Path: `id` (entero) | Borrado lógico: establece `activo = False` | `200 OK`, `404 Not Found` |
+
+---
+
+## Cómo Probar las Funcionalidades
+
+### 1. Iniciar los servicios:
+1. Asegúrate de tener MySQL corriendo con Docker (`docker compose up -d`).
+2. Inicia el backend:
+   ```bash
+   backend\venv\Scripts\uvicorn app.main:app --app-dir backend --reload --port 8000
+   ```
+3. En otra terminal, inicia el frontend:
+   ```bash
+   cd frontend
+   npm.cmd run dev
+   ```
+
+### 2. Pruebas manuales desde el Frontend:
+- Abre [http://localhost:5173](http://localhost:5173) en el navegador.
+- **Crear Categoría:** Ingresa un nombre (ej. "Equipos de Cómputo"), plazo de entrega (ej. 15 días) y descripción opcional. Haz clic en **+ Registrar Categoría**.
+- **Validación de reglas:**
+  - Intenta crear una categoría con un plazo mayor a 180 días o menor a 1 día; el formulario o el backend lo rechazarán.
+  - Intenta crear una categoría con un nombre ya existente; se mostrará un mensaje de error indicando la duplicidad.
+- **Listar y Filtrar:** Observa las categorías en la tabla inferior y usa la casilla "Ver solo activas" para alternar la visualización.
+- **Editar Categoría:** Haz clic en ✏️ **Editar**, modifica el plazo o descripción y haz clic en **Guardar Cambios**. También puedes reactivar una categoría inactiva.
+- **Borrado Lógico:** Haz clic en 🗑️ **Desactivar**. La categoría pasará a estado inactiva (`activo = false`) sin eliminarse físicamente de la base de datos.

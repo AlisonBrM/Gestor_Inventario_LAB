@@ -1,7 +1,18 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.database import init_db
+from app.routers import categoria_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Inicializa las tablas al iniciar la aplicación si la base de datos está disponible
+    init_db()
+    yield
+
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -9,6 +20,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
+    lifespan=lifespan,
 )
 
 # Configuración de CORS
@@ -19,6 +31,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Inclusión de routers
+app.include_router(categoria_router, prefix=settings.API_PREFIX)
 
 
 @app.get("/")

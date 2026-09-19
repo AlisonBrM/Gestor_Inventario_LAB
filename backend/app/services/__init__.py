@@ -11,6 +11,12 @@ from app.services.equipo_service import (
     EquipoAlreadyExistsError,
     EquipoValidationError,
 )
+from app.services.persona_service import (
+    PersonaService,
+    PersonaNotFoundError,
+    PersonaAlreadyExistsError,
+    PersonaValidationError,
+)
 
 __all__ = [
     "CategoriaService",
@@ -21,4 +27,8 @@ __all__ = [
     "EquipoNotFoundError",
     "EquipoAlreadyExistsError",
     "EquipoValidationError",
+    "PersonaService",
+    "PersonaNotFoundError",
+    "PersonaAlreadyExistsError",
+    "PersonaValidationError",
 ]

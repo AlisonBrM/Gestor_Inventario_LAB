@@ -11,6 +11,13 @@ from app.schemas.equipo import (
     EquipoUpdate,
     EquipoResponse,
 )
+from app.schemas.persona import (
+    PersonaBase,
+    PersonaCreate,
+    PersonaUpdate,
+    PersonaResponse,
+    TipoPersona,
+)
 
 __all__ = [
     "CategoriaBase",
@@ -21,4 +28,9 @@ __all__ = [
     "EquipoCreate",
     "EquipoUpdate",
     "EquipoResponse",
+    "PersonaBase",
+    "PersonaCreate",
+    "PersonaUpdate",
+    "PersonaResponse",
+    "TipoPersona",
 ]

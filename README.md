@@ -172,6 +172,15 @@ La aplicación estará disponible en [http://localhost:5173](http://localhost:51
 | `PUT` | `/api/equipos/{id}` | Path: `id`, Body JSON: `EquipoUpdate` | Actualiza los datos de un equipo (nombre, descripción, categoría, mantenimiento, activo) | `200 OK`, `400 Bad Request`, `404 Not Found` |
 | `DELETE` | `/api/equipos/{id}` | Path: `id` (entero) | Borrado lógico: establece `activo = False` | `200 OK`, `404 Not Found` |
 
+### Módulo de Personas (`/api/personas`)
+| Método | Ruta | Parámetros / Body | Descripción | Códigos de Respuesta |
+|---|---|---|---|---|
+| `POST` | `/api/personas` | Body JSON: `PersonaCreate` | Registra una nueva persona (profesor o estudiante) con `activo=True` | `201 Created`, `400 Bad Request` |
+| `GET` | `/api/personas` | Query:<br>- `solo_activas=true` (opcional)<br>- `tipo_persona={profesor/estudiante}` (opcional)<br>- `facultad={texto}` (opcional)<br>- `busqueda={texto}` (opcional) | Lista las personas registradas aplicando los filtros especificados | `200 OK` |
+| `GET` | `/api/personas/{cedula}` | Path: `cedula` (string) | Retorna los detalles de una persona por su cédula | `200 OK`, `400 Bad Request`, `404 Not Found` |
+| `PUT` | `/api/personas/{cedula}` | Path: `cedula`, Body JSON: `PersonaUpdate` | Actualiza los datos de una persona (la cédula es inmutable) | `200 OK`, `400 Bad Request`, `404 Not Found` |
+| `DELETE` | `/api/personas/{cedula}` | Path: `cedula` (string) | Borrado lógico: establece `activo = False` | `200 OK`, `400 Bad Request`, `404 Not Found` |
+
 ---
 
 ## Cómo Probar las Funcionalidades
@@ -189,9 +198,38 @@ La aplicación estará disponible en [http://localhost:5173](http://localhost:51
    ```
 
 ### 2. Pruebas manuales desde el Frontend:
-Abre [http://localhost:5173](http://localhost:5173) en el navegador. La aplicación cuenta con navegación por pestañas en la parte superior: **📦 Equipos de Laboratorio** y **🏷️ Categorías**.
+Abre [http://localhost:5173](http://localhost:5173) en el navegador. La aplicación cuenta con navegación por pestañas en la parte superior: **👤 Personas**, **📦 Equipos de Laboratorio** y **🏷️ Categorías**.
 
-#### A. Pruebas del Módulo de Categorías:
+#### A. Pruebas del Módulo de Personas:
+- Cambia a la pestaña **👤 Personas**.
+- **Crear Persona:**
+  - Ingresa una cédula válida de 6 a 15 dígitos numéricos (ej. `1001234567`).
+  - Ingresa el nombre completo (ej. `Ana María Gómez`).
+  - Selecciona el tipo de persona (`Estudiante` o `Profesor`).
+  - Ingresa el número celular de 7 a 15 dígitos numéricos (ej. `3001234567`).
+  - Opcionalmente añade un correo electrónico válido (ej. `ana.gomez@universidad.edu.co`).
+  - Ingresa la facultad a la que pertenece (ej. `Facultad de Ingeniería`).
+  - Haz clic en **+ Registrar Persona**. La persona se creará con estado `Activo`.
+- **Validación de reglas:**
+  - Intenta registrar otra persona con la misma cédula `1001234567`; el sistema rechazará la creación por duplicidad (RN-PER-01).
+  - Intenta ingresar una cédula o teléfono con letras o con longitud fuera del rango permitido; el sistema mostrará un mensaje de validación.
+  - Intenta ingresar un correo electrónico con formato inválido; el sistema no lo admitirá.
+- **Listar y Filtrar:**
+  - Filtra por **Tipo de Persona** (Estudiantes o Profesores).
+  - Busca por **Cédula o Nombre** en tiempo real.
+  - Filtra por nombre de **Facultad**.
+  - Alterna la casilla **Solo activas** para visualizar personas con borrado lógico.
+- **Editar Persona:**
+  - Haz clic en ✏️ **Editar** en una fila del directorio.
+  - Nota que la cédula permanece fija (inmutable).
+  - Modifica el nombre, teléfono, facultad, tipo o correo.
+  - Marca o desmarca la casilla **Persona Activa** para reactivarla o desactivarla.
+  - Haz clic en **Guardar Cambios**.
+- **Borrado Lógico:**
+  - Haz clic en 🗑️ **Desactivar** sobre una persona activa.
+  - La persona pasará al estado `Inactivo` (`activo = false`) preservando su registro para integridad de préstamos futuros.
+
+#### B. Pruebas del Módulo de Categorías:
 - Cambia a la pestaña **🏷️ Categorías**.
 - **Crear Categoría:** Ingresa un nombre (ej. "Equipos de Cómputo"), plazo de entrega (ej. 15 días) y descripción opcional. Haz clic en **+ Registrar Categoría**.
 - **Validación de reglas:**
@@ -201,7 +239,7 @@ Abre [http://localhost:5173](http://localhost:5173) en el navegador. La aplicaci
 - **Editar Categoría:** Haz clic en ✏️ **Editar**, modifica el plazo o descripción y haz clic en **Guardar Cambios**. También puedes reactivar una categoría inactiva.
 - **Borrado Lógico:** Haz clic en 🗑️ **Desactivar**. La categoría pasará a estado inactiva (`activo = false`) sin eliminarse físicamente de la base de datos.
 
-#### B. Pruebas del Módulo de Equipos:
+#### C. Pruebas del Módulo de Equipos:
 - Cambia a la pestaña **📦 Equipos de Laboratorio**.
 - **Crear Equipo:**
   - Selecciona una categoría del desplegable (solo muestra categorías activas).

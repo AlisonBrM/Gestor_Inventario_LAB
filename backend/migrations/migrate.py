@@ -1,7 +1,7 @@
 """Módulo para inicializar las tablas de la base de datos."""
 import logging
 from app.core.database import Base, engine
-from app.models import Categoria, Equipo  # noqa: F401
+from app.models import Categoria, Equipo, Persona  # noqa: F401
 
 logger = logging.getLogger(__name__)
 

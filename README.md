@@ -163,6 +163,15 @@ La aplicación estará disponible en [http://localhost:5173](http://localhost:51
 | `PUT` | `/api/categorias/{id}` | Path: `id`, Body JSON: `CategoriaUpdate` | Actualiza los datos de una categoría | `200 OK`, `400 Bad Request`, `404 Not Found` |
 | `DELETE` | `/api/categorias/{id}` | Path: `id` (entero) | Borrado lógico: establece `activo = False` | `200 OK`, `404 Not Found` |
 
+### Módulo de Equipos (`/api/equipos`)
+| Método | Ruta | Parámetros / Body | Descripción | Códigos de Respuesta |
+|---|---|---|---|---|
+| `POST` | `/api/equipos` | Body JSON: `EquipoCreate` | Registra un nuevo equipo con `mantenimiento=False`, `activo=True` y `fecha_creacion=hoy` | `201 Created`, `400 Bad Request` |
+| `GET` | `/api/equipos` | Query:<br>- `solo_activos=true` (opcional)<br>- `id_categoria={id}` (opcional)<br>- `en_mantenimiento={true/false}` (opcional) | Lista los equipos registrados aplicando los filtros especificados | `200 OK` |
+| `GET` | `/api/equipos/{id}` | Path: `id` (entero) | Retorna los detalles de un equipo | `200 OK`, `404 Not Found` |
+| `PUT` | `/api/equipos/{id}` | Path: `id`, Body JSON: `EquipoUpdate` | Actualiza los datos de un equipo (nombre, descripción, categoría, mantenimiento, activo) | `200 OK`, `400 Bad Request`, `404 Not Found` |
+| `DELETE` | `/api/equipos/{id}` | Path: `id` (entero) | Borrado lógico: establece `activo = False` | `200 OK`, `404 Not Found` |
+
 ---
 
 ## Cómo Probar las Funcionalidades
@@ -180,7 +189,10 @@ La aplicación estará disponible en [http://localhost:5173](http://localhost:51
    ```
 
 ### 2. Pruebas manuales desde el Frontend:
-- Abre [http://localhost:5173](http://localhost:5173) en el navegador.
+Abre [http://localhost:5173](http://localhost:5173) en el navegador. La aplicación cuenta con navegación por pestañas en la parte superior: **📦 Equipos de Laboratorio** y **🏷️ Categorías**.
+
+#### A. Pruebas del Módulo de Categorías:
+- Cambia a la pestaña **🏷️ Categorías**.
 - **Crear Categoría:** Ingresa un nombre (ej. "Equipos de Cómputo"), plazo de entrega (ej. 15 días) y descripción opcional. Haz clic en **+ Registrar Categoría**.
 - **Validación de reglas:**
   - Intenta crear una categoría con un plazo mayor a 180 días o menor a 1 día; el formulario o el backend lo rechazarán.
@@ -188,3 +200,25 @@ La aplicación estará disponible en [http://localhost:5173](http://localhost:51
 - **Listar y Filtrar:** Observa las categorías en la tabla inferior y usa la casilla "Ver solo activas" para alternar la visualización.
 - **Editar Categoría:** Haz clic en ✏️ **Editar**, modifica el plazo o descripción y haz clic en **Guardar Cambios**. También puedes reactivar una categoría inactiva.
 - **Borrado Lógico:** Haz clic en 🗑️ **Desactivar**. La categoría pasará a estado inactiva (`activo = false`) sin eliminarse físicamente de la base de datos.
+
+#### B. Pruebas del Módulo de Equipos:
+- Cambia a la pestaña **📦 Equipos de Laboratorio**.
+- **Crear Equipo:**
+  - Selecciona una categoría del desplegable (solo muestra categorías activas).
+  - Ingresa un secuencial único (ej. `OSC-001`) y el nombre del equipo (ej. `Osciloscopio Digital Rigol 100MHz`).
+  - Opcionalmente añade una descripción.
+  - Haz clic en **+ Registrar Equipo**. El equipo se creará con estado `✅ Operativo` (`mantenimiento = false`), `Activo` (`activo = true`) y con la fecha del día asignada automáticamente.
+- **Validación de reglas:**
+  - Intenta registrar otro equipo con el mismo secuencial `OSC-001` (o en minúsculas `osc-001`); el sistema rechazará la creación por duplicidad.
+  - Si una categoría es desactivada en la pestaña de categorías, no aparecerá disponible para registrar nuevos equipos.
+- **Filtrar Equipos:**
+  - Filtra por **Categoría** para ver únicamente los equipos asociados a ella.
+  - Filtra por **Estado de Mantenimiento** (Operativos o En Mantenimiento).
+  - Alterna la casilla **Solo activos** para incluir o excluir equipos con borrado lógico.
+- **Editar Equipo:**
+  - Haz clic en ✏️ **Editar** sobre un equipo.
+  - Puedes cambiar el nombre, descripción, o cambiar su categoría a otra activa.
+  - Puedes marcar la casilla **En Mantenimiento** para enviar el equipo a reparación (SUP-08). Al guardar, su estado cambiará a `🔧 En Mantenimiento`.
+  - Puedes desmarcar/marcar **Equipo Activo** para gestionar su reactivación.
+- **Borrado Lógico:**
+  - Haz clic en 🗑️ **Desactivar**. El equipo se marcará como `Inactivo` (`activo = false`) preservando su registro en la base de datos.

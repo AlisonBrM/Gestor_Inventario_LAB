@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import Categorias from './components/Categorias';
+import Equipos from './components/Equipos';
 
 function App() {
+  const [seccionActiva, setSeccionActiva] = useState('equipos');
   const [backendStatus, setBackendStatus] = useState('Verificando conexión...');
   const [isHealthy, setIsHealthy] = useState(false);
 
@@ -33,8 +35,23 @@ function App() {
         </div>
       </header>
 
+      <nav className="nav-tabs">
+        <button
+          className={`tab-btn ${seccionActiva === 'equipos' ? 'active' : ''}`}
+          onClick={() => setSeccionActiva('equipos')}
+        >
+          📦 Equipos de Laboratorio
+        </button>
+        <button
+          className={`tab-btn ${seccionActiva === 'categorias' ? 'active' : ''}`}
+          onClick={() => setSeccionActiva('categorias')}
+        >
+          🏷️ Categorías
+        </button>
+      </nav>
+
       <main className="app-main">
-        <Categorias />
+        {seccionActiva === 'equipos' ? <Equipos /> : <Categorias />}
       </main>
     </div>
   );

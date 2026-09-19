@@ -5,10 +5,20 @@ from app.services.categoria_service import (
     CategoriaAlreadyExistsError,
     CategoriaValidationError,
 )
+from app.services.equipo_service import (
+    EquipoService,
+    EquipoNotFoundError,
+    EquipoAlreadyExistsError,
+    EquipoValidationError,
+)
 
 __all__ = [
     "CategoriaService",
     "CategoriaNotFoundError",
     "CategoriaAlreadyExistsError",
     "CategoriaValidationError",
+    "EquipoService",
+    "EquipoNotFoundError",
+    "EquipoAlreadyExistsError",
+    "EquipoValidationError",
 ]

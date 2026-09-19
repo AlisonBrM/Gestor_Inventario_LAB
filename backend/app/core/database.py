@@ -31,6 +31,7 @@ def init_db() -> None:
     try:
         # Importar modelos aquí para asegurar su registro en Base.metadata
         from app.models.categoria import Categoria  # noqa: F401
+        from app.models.equipo import Equipo  # noqa: F401
         Base.metadata.create_all(bind=engine)
         logger.info("Tablas de la base de datos verificadas/inicializadas correctamente.")
     except Exception as exc:

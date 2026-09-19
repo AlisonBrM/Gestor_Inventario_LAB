@@ -8,6 +8,7 @@ from app.repositories.categoria_repository import CategoriaRepository
 from app.repositories.equipo_repository import EquipoRepository
 from app.repositories.persona_repository import PersonaRepository
 from app.repositories.prestamo_repository import PrestamoRepository
+from app.schemas.devolucion import DevolucionCreate
 from app.schemas.prestamo import PrestamoCreate, PrestamoResponse
 from app.services.prestamo_service import (
     PrestamoNotFoundError,
@@ -113,5 +114,31 @@ def obtener_prestamo(
     except PrestamoNotFoundError as err:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(err),
+        ) from err
+
+
+@router.post(
+    "/{id}/devolucion",
+    response_model=PrestamoResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Registrar la devolución de un préstamo",
+)
+def registrar_devolucion(
+    id: int,
+    datos: DevolucionCreate,
+    service: PrestamoService = Depends(get_prestamo_service),
+) -> PrestamoResponse:
+    """Registra la devolución de un préstamo de equipo recibido por el administrador."""
+    try:
+        return service.registrar_devolucion(id, datos)
+    except PrestamoNotFoundError as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(err),
+        ) from err
+    except PrestamoValidationError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(err),
         ) from err

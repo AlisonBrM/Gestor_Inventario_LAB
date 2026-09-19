@@ -5,6 +5,7 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.models.devolucion import Devolucion
 from app.models.prestamo import Prestamo
 from app.routers.prestamo_router import get_prestamo_service
 from app.services.prestamo_service import (
@@ -209,3 +210,72 @@ def test_endpoint_listar_prestamos_error_validacion_400(mock_service):
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "no puede ser posterior" in response.json()["detail"]
+
+
+# =========================================================================
+# Pruebas del Endpoint POST /api/prestamos/{id}/devolucion
+# =========================================================================
+
+def test_endpoint_registrar_devolucion_200_ok(mock_service):
+    """Verifica que POST /api/prestamos/{id}/devolucion retorne 200 OK y el préstamo devuelto."""
+    hoy = date.today()
+    prestamo_devuelto = Prestamo(
+        id=10,
+        cedula_persona="1001234567",
+        id_equipo=5,
+        fecha_prestamo=hoy - timedelta(days=5),
+        fecha_devolucion_esperada=hoy + timedelta(days=5),
+    )
+    prestamo_devuelto.devolucion = Devolucion(
+        id_prestamo=10,
+        fecha_devolucion=hoy,
+        novedades="Equipo devuelto en perfecto estado",
+    )
+    mock_service.registrar_devolucion.return_value = prestamo_devuelto
+
+    payload = {
+        "fecha_devolucion": str(hoy),
+        "novedades": "Equipo devuelto en perfecto estado",
+        "enviar_a_mantenimiento": False,
+    }
+    response = client.post("/api/prestamos/10/devolucion", json=payload)
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["id"] == 10
+    assert data["devuelto"] is True
+    assert data["estado"] == "devuelto"
+    assert data["devolucion"] is not None
+    assert data["devolucion"]["novedades"] == "Equipo devuelto en perfecto estado"
+
+
+def test_endpoint_registrar_devolucion_404_no_encontrado(mock_service):
+    """Verifica que retorne 404 si el préstamo a devolver no existe."""
+    mock_service.registrar_devolucion.side_effect = PrestamoNotFoundError(99)
+
+    payload = {
+        "fecha_devolucion": str(date.today()),
+        "novedades": "Ninguna",
+        "enviar_a_mantenimiento": False,
+    }
+    response = client.post("/api/prestamos/99/devolucion", json=payload)
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert "99" in response.json()["detail"]
+
+
+def test_endpoint_registrar_devolucion_400_error_validacion(mock_service):
+    """Verifica que retorne 400 Bad Request si falla una regla de negocio del servicio."""
+    mock_service.registrar_devolucion.side_effect = PrestamoValidationError(
+        "Debe registrar las novedades u observaciones cuando el equipo pasa a mantenimiento."
+    )
+
+    payload = {
+        "fecha_devolucion": str(date.today()),
+        "novedades": "",
+        "enviar_a_mantenimiento": True,
+    }
+    response = client.post("/api/prestamos/5/devolucion", json=payload)
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "Debe registrar las novedades" in response.json()["detail"]

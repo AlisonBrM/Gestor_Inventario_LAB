@@ -23,6 +23,13 @@ export default function Prestamos() {
   const [filtroFechaHasta, setFiltroFechaHasta] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('');
 
+  // Formulario de Devolución
+  const [prestamoDevolucion, setPrestamoDevolucion] = useState(null);
+  const [fechaDevolucion, setFechaDevolucion] = useState(hoyStr);
+  const [novedades, setNovedades] = useState('');
+  const [enviarMantenimiento, setEnviarMantenimiento] = useState(false);
+  const [enviandoDevolucion, setEnviandoDevolucion] = useState(false);
+
   // Cargar opciones para formulario y filtros
   const cargarOpciones = async () => {
     setLoadingDatos(true);
@@ -150,13 +157,95 @@ export default function Prestamos() {
         tipo: 'success',
         texto: `¡Préstamo #${data.id} creado con éxito! Fecha esperada de devolución: ${data.fecha_devolucion_esperada}`,
       });
-      // Recargar opciones y listado de préstamos
       cargarOpciones();
       cargarPrestamos();
     } catch (err) {
       setMensaje({ tipo: 'error', texto: err.message || 'Error de conexión con el servidor.' });
     } finally {
       setEnviando(false);
+    }
+  };
+
+  // Iniciar proceso de devolución para un préstamo
+  const iniciarDevolucion = (p) => {
+    setPrestamoDevolucion(p);
+    setFechaDevolucion(hoyStr);
+    setNovedades('');
+    setEnviarMantenimiento(false);
+    setMensaje(null);
+    setPrestamoCreado(null);
+  };
+
+  const cancelarDevolucion = () => {
+    setPrestamoDevolucion(null);
+    setNovedades('');
+    setEnviarMantenimiento(false);
+  };
+
+  // Enviar formulario de devolución
+  const handleRegistrarDevolucion = async (e) => {
+    e.preventDefault();
+    setMensaje(null);
+
+    if (!prestamoDevolucion) return;
+
+    // Validación de novedades si pasa a mantenimiento
+    if (enviarMantenimiento && !novedades.trim()) {
+      setMensaje({
+        tipo: 'error',
+        texto: 'Debe ingresar las novedades u observaciones del equipo si va a ser marcado en mantenimiento.',
+      });
+      return;
+    }
+
+    // Validación de fechas
+    if (fechaDevolucion > hoyStr) {
+      setMensaje({
+        tipo: 'error',
+        texto: 'La fecha de devolución no puede ser posterior a la fecha actual.',
+      });
+      return;
+    }
+
+    if (fechaDevolucion < prestamoDevolucion.fecha_prestamo) {
+      setMensaje({
+        tipo: 'error',
+        texto: `La fecha de devolución no puede ser anterior a la fecha de inicio del préstamo (${prestamoDevolucion.fecha_prestamo}).`,
+      });
+      return;
+    }
+
+    const payload = {
+      fecha_devolucion: fechaDevolucion || hoyStr,
+      novedades: novedades.trim() || null,
+      enviar_a_mantenimiento: Boolean(enviarMantenimiento),
+    };
+
+    setEnviandoDevolucion(true);
+    try {
+      const res = await fetch(`/api/prestamos/${prestamoDevolucion.id}/devolucion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.detail || 'Ocurrió un error al registrar la devolución.');
+      }
+
+      setMensaje({
+        tipo: 'success',
+        texto: `¡Devolución del Préstamo #${prestamoDevolucion.id} registrada exitosamente! El equipo quedó ${enviarMantenimiento ? 'marcado en Mantenimiento ⚠️' : 'operativo en inventario ✅'}.`,
+      });
+      setPrestamoDevolucion(null);
+      cargarOpciones();
+      cargarPrestamos();
+    } catch (err) {
+      setMensaje({ tipo: 'error', texto: err.message || 'Error de conexión al procesar la devolución.' });
+    } finally {
+      setEnviandoDevolucion(false);
     }
   };
 
@@ -298,6 +387,123 @@ export default function Prestamos() {
         </div>
       )}
 
+      {/* Formulario / Tarjeta para Registrar Devolución */}
+      {prestamoDevolucion && (
+        <div className="card edit-card" style={{ borderColor: '#2563eb', backgroundColor: '#f8fafc' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, color: '#1e40af' }}>
+              📥 Registrar Devolución de Equipo - Préstamo #{prestamoDevolucion.id}
+            </h3>
+            <span className="badge badge-active">Recepción de Equipo</span>
+          </div>
+
+          <p className="subtitle" style={{ fontSize: '0.85rem', marginTop: '0.25rem', marginBottom: '0.75rem' }}>
+            Indica la fecha de devolución, escribe las novedades encontradas y define si el equipo requiere mantenimiento.
+          </p>
+
+          <div className="form-grid" style={{ marginBottom: '1rem', backgroundColor: '#ffffff', padding: '0.75rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+            <div>
+              <strong>Solicitante:</strong>
+              <div>{prestamoDevolucion.nombre_persona || 'N/A'} (C.C. {prestamoDevolucion.cedula_persona})</div>
+            </div>
+            <div>
+              <strong>Equipo:</strong>
+              <div>{prestamoDevolucion.nombre_equipo} (Sec: {prestamoDevolucion.secuencial_equipo || 'S/N'})</div>
+            </div>
+            <div>
+              <strong>Fecha Préstamo:</strong>
+              <div>{prestamoDevolucion.fecha_prestamo}</div>
+            </div>
+            <div>
+              <strong>Fecha Esperada:</strong>
+              <div>{prestamoDevolucion.fecha_devolucion_esperada}</div>
+            </div>
+          </div>
+
+          <form onSubmit={handleRegistrarDevolucion}>
+            <div className="form-grid">
+              <div className="form-group">
+                <label htmlFor="input-fecha-devolucion">Fecha de Devolución Efectiva:</label>
+                <input
+                  id="input-fecha-devolucion"
+                  type="date"
+                  value={fechaDevolucion}
+                  min={prestamoDevolucion.fecha_prestamo}
+                  max={hoyStr}
+                  onChange={(e) => setFechaDevolucion(e.target.value)}
+                  disabled={enviandoDevolucion}
+                  required
+                />
+                <small style={{ color: '#64748b' }}>Por defecto hoy. Rango: entre fecha préstamo y hoy.</small>
+              </div>
+
+              <div className="form-group" style={{ display: 'flex', justifyContent: 'center' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '1.25rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={enviarMantenimiento}
+                    onChange={(e) => setEnviarMantenimiento(e.target.checked)}
+                    disabled={enviandoDevolucion}
+                    style={{ width: '1.2rem', height: '1.2rem' }}
+                  />
+                  <span>
+                    <strong>¿Marcar equipo en mantenimiento?</strong>
+                    <br />
+                    <small style={{ color: enviarMantenimiento ? '#b91c1c' : '#64748b' }}>
+                      {enviarMantenimiento
+                        ? '⚠️ El equipo pasará a mantenimiento y no podrá prestarse. Novedades obligatorias.'
+                        : 'El equipo quedará disponible y operativo.'}
+                    </small>
+                  </span>
+                </label>
+              </div>
+
+              <div className="form-group full-width">
+                <label htmlFor="input-novedades">
+                  Novedades u Observaciones del Equipo:{' '}
+                  {enviarMantenimiento ? (
+                    <strong style={{ color: '#b91c1c' }}>* (Obligatorio para mantenimiento)</strong>
+                  ) : (
+                    <small style={{ color: '#64748b' }}>(Opcional si el equipo queda operativo)</small>
+                  )}
+                </label>
+                <textarea
+                  id="input-novedades"
+                  rows="3"
+                  placeholder={
+                    enviarMantenimiento
+                      ? 'Describe detalladamente la falla, daño o motivo por el que se envía a mantenimiento...'
+                      : 'Observaciones del estado físico o funcional al recibir el equipo (opcional)...'
+                  }
+                  value={novedades}
+                  onChange={(e) => setNovedades(e.target.value)}
+                  disabled={enviandoDevolucion}
+                  required={enviarMantenimiento}
+                />
+              </div>
+            </div>
+
+            <div className="form-actions" style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={cancelarDevolucion}
+                disabled={enviandoDevolucion}
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={enviandoDevolucion}
+              >
+                {enviandoDevolucion ? 'Registrando Devolución...' : '✔ Confirmar Devolución'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Listado y Filtros de Préstamos */}
       <div className="card table-card" style={{ marginTop: '1.5rem' }}>
         <div className="table-header">
@@ -392,6 +598,7 @@ export default function Prestamos() {
                   <th>Fecha Préstamo</th>
                   <th>Fecha Devolución Esperada</th>
                   <th>Estado</th>
+                  <th>Acciones / Devolución</th>
                 </tr>
               </thead>
               <tbody>
@@ -418,6 +625,38 @@ export default function Prestamos() {
                       )}
                       {p.estado === 'devuelto' && (
                         <span className="badge badge-inactive">⚪ Devuelto</span>
+                      )}
+                    </td>
+                    <td className="actions-cell">
+                      {!p.devuelto ? (
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm"
+                          onClick={() => iniciarDevolucion(p)}
+                          title="Registrar devolución del equipo"
+                        >
+                          📥 Devolver Equipo
+                        </button>
+                      ) : (
+                        <div style={{ fontSize: '0.85rem' }}>
+                          <div>
+                            <strong>Devuelto:</strong> {p.devolucion?.fecha_devolucion || 'Sí'}
+                          </div>
+                          {p.devolucion?.novedades && (
+                            <div style={{ color: '#475569', marginTop: '0.2rem' }}>
+                              💬 <em>{p.devolucion.novedades}</em>
+                            </div>
+                          )}
+                          {p.equipo_mantenimiento ? (
+                            <span className="badge badge-danger" style={{ marginTop: '0.35rem', display: 'inline-block' }}>
+                              ⚠️ En Mantenimiento
+                            </span>
+                          ) : (
+                            <span className="badge badge-active" style={{ marginTop: '0.35rem', display: 'inline-block' }}>
+                              ✅ Operativo
+                            </span>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>

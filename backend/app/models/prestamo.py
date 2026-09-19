@@ -54,6 +54,10 @@ class Prestamo(Base):
         return self.equipo.nombre_categoria if self.equipo else None
 
     @property
+    def equipo_mantenimiento(self) -> bool | None:
+        return self.equipo.mantenimiento if self.equipo else None
+
+    @property
     def estado(self) -> str:
         if self.devuelto:
             return "devuelto"

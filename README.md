@@ -187,6 +187,7 @@ La aplicación estará disponible en [http://localhost:5173](http://localhost:51
 | `POST` | `/api/prestamos` | Body JSON: `PrestamoCreate` | Registra un nuevo préstamo validando reglas de negocio (solicitante sin préstamos vencidos, equipo operativo, etc.) y calcula la fecha de devolución esperada | `201 Created`, `400 Bad Request`, `404 Not Found`, `422 Unprocessable Content` |
 | `GET` | `/api/prestamos` | Query:<br>- `id_categoria={id}` (opcional)<br>- `fecha_desde={YYYY-MM-DD}` (opcional)<br>- `fecha_hasta={YYYY-MM-DD}` (opcional)<br>- `estado={vigente/vencido}` (opcional) | Lista todos los préstamos registrados aplicando los filtros opcionales de categoría, rango de fechas y estado | `200 OK`, `400 Bad Request` |
 | `GET` | `/api/prestamos/{id}` | Path: `id` (entero) | Retorna los datos detallados de un préstamo por su ID | `200 OK`, `404 Not Found` |
+| `POST` | `/api/prestamos/{id}/devolucion` | Path: `id`, Body JSON: `DevolucionCreate` | Registra la devolución efectiva del equipo prestado, actualiza las novedades, define si pasa a mantenimiento y cambia el estado del préstamo a devuelto | `200 OK`, `400 Bad Request`, `404 Not Found`, `422 Unprocessable Content` |
 
 ---
 
@@ -299,3 +300,25 @@ Abre [http://localhost:5173](http://localhost:5173) en el navegador. La aplicaci
   - **Filtrar por Estado:** Selecciona `🟢 Vigente` (préstamos activos cuya fecha límite aún no vence) o `🔴 Vencido` (préstamos activos cuya fecha esperada de devolución ya pasó) o `Todos los estados` (para incluir todos, incluso si hay devueltos).
   - **Limpiar Filtros:** Haz clic en el botón **✕ Limpiar** para restablecer todos los filtros a sus valores por defecto.
   - **Refresco Automático:** Al registrar un nuevo préstamo, la tabla se actualiza automáticamente mostrando el nuevo registro en la parte superior.
+
+- **Registrar la Devolución de un Equipo:**
+  - En la tabla **Historial de Préstamos**, ubica cualquier préstamo activo con estado `🟢 Vigente` o `🔴 Vencido`.
+  - En la columna **Acciones / Devolución**, haz clic en el botón **📥 Devolver Equipo**.
+  - Se desplegará la tarjeta de recepción del equipo (**📥 Registrar Devolución de Equipo - Préstamo #X**) con el resumen del solicitante, equipo y fechas de préstamo.
+  - **Caso 1: Devolución operativa sin mantenimiento:**
+    - Deja la fecha de devolución (por defecto hoy, o ajústala dentro del rango permitido).
+    - Deja desmarcada la casilla *¿Marcar equipo en mantenimiento?*.
+    - Si deseas, ingresa una novedad u observación (ej. *"Equipo recibido en óptimas condiciones"*). Al no pasar a mantenimiento, el campo es opcional.
+    - Haz clic en **✔ Confirmar Devolución**.
+    - El préstamo cambiará inmediatamente a estado `⚪ Devuelto`, se mostrarán la fecha de entrega y la novedad registrada, y el equipo permanecerá con la etiqueta `✅ Operativo`.
+  - **Caso 2: Devolución con envío a mantenimiento (Validación de novedades obligatorias):**
+    - En otro préstamo activo, haz clic en **📥 Devolver Equipo**.
+    - Marca la casilla *¿Marcar equipo en mantenimiento?*.
+    - Intenta confirmar la devolución con el campo de novedades vacío; el sistema mostrará un mensaje de alerta impidiendo la operación: *"Debe ingresar las novedades u observaciones del equipo si va a ser marcado en mantenimiento."*
+    - Ingresa la descripción del daño o falla (ej. *"Sonda rota y display intermitente tras práctica de laboratorio"*).
+    - Haz clic en **✔ Confirmar Devolución**.
+    - El préstamo pasará a estado `⚪ Devuelto` y el equipo quedará automáticamente marcado como `⚠️ En Mantenimiento`.
+    - Puedes ir a la pestaña **📦 Equipos de Laboratorio** y verificar que el equipo aparece en mantenimiento. Al intentar solicitarlo en un nuevo préstamo, el sistema impedirá prestarlo (RN-PREST-02).
+  - **Validación de reglas adicionales de devolución:**
+    - **Préstamo ya devuelto:** Una vez devuelto un equipo, el botón de devolución se sustituye por la información de entrega y no es posible duplicar la devolución (RN-DEV-02).
+    - **Rango de fechas:** Si se intenta colocar una fecha futura o anterior a la fecha en que se inició el préstamo, el sistema rechazará la devolución (RN-DEV-03).

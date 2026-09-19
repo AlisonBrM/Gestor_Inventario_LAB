@@ -93,3 +93,9 @@ class PrestamoRepository:
         self.db.commit()
         self.db.refresh(devolucion)
         return devolucion
+
+    def get_devolucion_by_prestamo_id(self, prestamo_id: int) -> Optional[Devolucion]:
+        """Obtiene la devolución asociada a un préstamo por su ID."""
+        return self.db.execute(
+            select(Devolucion).where(Devolucion.id_prestamo == prestamo_id)
+        ).scalar_one_or_none()

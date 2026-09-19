@@ -1,11 +1,13 @@
 from datetime import date, timedelta
 from typing import Optional, Sequence
 
+from app.models.devolucion import Devolucion
 from app.models.prestamo import Prestamo
 from app.repositories.categoria_repository import CategoriaRepository
 from app.repositories.equipo_repository import EquipoRepository
 from app.repositories.persona_repository import PersonaRepository
 from app.repositories.prestamo_repository import PrestamoRepository
+from app.schemas.devolucion import DevolucionCreate
 from app.schemas.prestamo import PrestamoCreate
 
 
@@ -190,3 +192,64 @@ class PrestamoService:
         )
 
         return self.prestamo_repository.create(nuevo_prestamo)
+
+    def registrar_devolucion(self, prestamo_id: int, datos: DevolucionCreate) -> Prestamo:
+        """Registra la devolución de un préstamo aplicando las reglas de negocio.
+
+        Reglas aplicadas:
+        - RN-DEV-01: El préstamo debe existir (o lanza PrestamoNotFoundError).
+        - RN-DEV-02: El préstamo no debe haber sido devuelto previamente (o lanza PrestamoValidationError).
+        - RN-DEV-03: La fecha de devolución no puede ser posterior a la fecha actual ni anterior a la fecha de inicio del préstamo.
+        - RN-DEV-04: Si el equipo se marca para mantenimiento, el administrador debe escribir obligatoriamente las novedades.
+        - RN-DEV-05: Se actualiza el estado de mantenimiento del equipo según lo indicado por el administrador.
+        - RN-DEV-06: Se persiste la devolución y el préstamo pasa a estar devuelto.
+        """
+        # RN-DEV-01: Validar existencia del préstamo
+        prestamo = self.prestamo_repository.get_by_id(prestamo_id)
+        if not prestamo:
+            raise PrestamoNotFoundError(prestamo_id)
+
+        # RN-DEV-02: Validar que no haya sido devuelto previamente
+        if prestamo.devuelto:
+            raise PrestamoValidationError(
+                f"El préstamo #{prestamo_id} ya fue devuelto previamente."
+            )
+
+        # RN-DEV-03: Validación de fecha de devolución
+        fecha_efectiva = datos.fecha_devolucion or date.today()
+        if fecha_efectiva > date.today():
+            raise PrestamoValidationError(
+                "La fecha de devolución no puede ser posterior a la fecha actual."
+            )
+        if fecha_efectiva < prestamo.fecha_prestamo:
+            raise PrestamoValidationError(
+                f"La fecha de devolución ({fecha_efectiva}) no puede ser anterior a la fecha de inicio del préstamo ({prestamo.fecha_prestamo})."
+            )
+
+        # RN-DEV-04: Novedades obligatorias únicamente si se envía a mantenimiento
+        novedades_limpias = datos.novedades.strip() if datos.novedades else None
+        if datos.enviar_a_mantenimiento and not novedades_limpias:
+            raise PrestamoValidationError(
+                "Debe registrar las novedades u observaciones cuando el equipo pasa a mantenimiento."
+            )
+
+        # RN-DEV-05: Actualizar estado de mantenimiento del equipo
+        equipo = self.equipo_repository.get_by_id(prestamo.id_equipo)
+        if not equipo:
+            raise PrestamoValidationError(
+                f"El equipo asociado (ID: {prestamo.id_equipo}) no fue encontrado."
+            )
+        equipo.mantenimiento = datos.enviar_a_mantenimiento
+        self.equipo_repository.update(equipo)
+
+        # RN-DEV-06: Crear y persistir la devolución
+        devolucion = Devolucion(
+            id_prestamo=prestamo.id,
+            fecha_devolucion=fecha_efectiva,
+            novedades=novedades_limpias,
+        )
+        self.prestamo_repository.create_devolucion(devolucion)
+
+        # Actualizar relación en memoria para respuesta inmediata
+        prestamo.devolucion = devolucion
+        return prestamo

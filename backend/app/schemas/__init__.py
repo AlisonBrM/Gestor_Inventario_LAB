@@ -18,6 +18,10 @@ from app.schemas.persona import (
     PersonaResponse,
     TipoPersona,
 )
+from app.schemas.devolucion import (
+    DevolucionCreate,
+    DevolucionResponse,
+)
 from app.schemas.prestamo import (
     PrestamoCreate,
     PrestamoResponse,
@@ -28,6 +32,8 @@ __all__ = [
     "CategoriaCreate",
     "CategoriaUpdate",
     "CategoriaResponse",
+    "DevolucionCreate",
+    "DevolucionResponse",
     "EquipoBase",
     "EquipoCreate",
     "EquipoUpdate",

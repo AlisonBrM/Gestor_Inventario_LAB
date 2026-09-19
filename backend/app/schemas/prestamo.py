@@ -34,6 +34,9 @@ class PrestamoCreate(BaseModel):
         return trimmed
 
 
+from app.schemas.devolucion import DevolucionResponse
+
+
 class PrestamoResponse(BaseModel):
     """Esquema de respuesta detallada para un Préstamo."""
 
@@ -49,5 +52,7 @@ class PrestamoResponse(BaseModel):
     fecha_devolucion_esperada: date
     devuelto: bool = False
     estado: str = "vigente"
+    equipo_mantenimiento: Optional[bool] = None
+    devolucion: Optional[DevolucionResponse] = None
 
     model_config = ConfigDict(from_attributes=True)

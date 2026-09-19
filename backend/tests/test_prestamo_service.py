@@ -3,6 +3,7 @@ from unittest.mock import create_autospec
 import pytest
 
 from app.models.categoria import Categoria
+from app.models.devolucion import Devolucion
 from app.models.equipo import Equipo
 from app.models.persona import Persona
 from app.models.prestamo import Prestamo
@@ -10,6 +11,7 @@ from app.repositories.categoria_repository import CategoriaRepository
 from app.repositories.equipo_repository import EquipoRepository
 from app.repositories.persona_repository import PersonaRepository
 from app.repositories.prestamo_repository import PrestamoRepository
+from app.schemas.devolucion import DevolucionCreate
 from app.schemas.prestamo import PrestamoCreate
 from app.services.prestamo_service import (
     PrestamoNotFoundError,
@@ -575,3 +577,247 @@ def test_listar_prestamos_combinacion_filtros(service, mock_prestamo_repo):
         fecha_hasta=f_hasta,
         estado="vigente",
     )
+
+
+# =========================================================================
+# 5. Pruebas de Registro de Devolución (RN-DEV-01 a RN-DEV-06)
+# =========================================================================
+
+def test_registrar_devolucion_exitosa_sin_mantenimiento(
+    service, mock_prestamo_repo, mock_equipo_repo
+):
+    """RN-DEV-01 a RN-DEV-06: Devolución exitosa de un equipo que se entrega operativo sin novedades."""
+    hoy = date.today()
+    prestamo = Prestamo(
+        id=1,
+        cedula_persona="1001234567",
+        id_equipo=10,
+        fecha_prestamo=hoy - timedelta(days=5),
+        fecha_devolucion_esperada=hoy + timedelta(days=5),
+    )
+    equipo = Equipo(id=10, nombre="Multímetro Digital", secuencial="EQ-010", mantenimiento=False, id_categoria=1)
+    mock_prestamo_repo.get_by_id.return_value = prestamo
+    mock_equipo_repo.get_by_id.return_value = equipo
+
+    datos = DevolucionCreate(
+        fecha_devolucion=hoy,
+        novedades=None,
+        enviar_a_mantenimiento=False,
+    )
+
+    resultado = service.registrar_devolucion(1, datos)
+
+    assert resultado.devuelto is True
+    assert resultado.devolucion is not None
+    assert resultado.devolucion.fecha_devolucion == hoy
+    assert resultado.devolucion.novedades is None
+    assert equipo.mantenimiento is False
+    mock_equipo_repo.update.assert_called_once_with(equipo)
+    mock_prestamo_repo.create_devolucion.assert_called_once()
+
+
+def test_registrar_devolucion_exitosa_con_mantenimiento_y_novedades(
+    service, mock_prestamo_repo, mock_equipo_repo
+):
+    """RN-DEV-04, RN-DEV-05: Devolución con envío a mantenimiento y novedades registradas."""
+    hoy = date.today()
+    prestamo = Prestamo(
+        id=2,
+        cedula_persona="1001234567",
+        id_equipo=10,
+        fecha_prestamo=hoy - timedelta(days=3),
+        fecha_devolucion_esperada=hoy + timedelta(days=5),
+    )
+    equipo = Equipo(id=10, nombre="Osciloscopio", secuencial="EQ-020", mantenimiento=False, id_categoria=1)
+    mock_prestamo_repo.get_by_id.return_value = prestamo
+    mock_equipo_repo.get_by_id.return_value = equipo
+
+    datos = DevolucionCreate(
+        fecha_devolucion=hoy,
+        novedades="Sonda dañada durante uso en laboratorio.",
+        enviar_a_mantenimiento=True,
+    )
+
+    resultado = service.registrar_devolucion(2, datos)
+
+    assert resultado.devuelto is True
+    assert resultado.devolucion.novedades == "Sonda dañada durante uso en laboratorio."
+    assert equipo.mantenimiento is True
+    mock_equipo_repo.update.assert_called_once_with(equipo)
+    mock_prestamo_repo.create_devolucion.assert_called_once()
+
+
+def test_registrar_devolucion_fecha_por_defecto_hoy(
+    service, mock_prestamo_repo, mock_equipo_repo
+):
+    """RN-DEV-03: Si fecha_devolucion no se especifica, toma date.today()."""
+    hoy = date.today()
+    prestamo = Prestamo(
+        id=3,
+        cedula_persona="1001234567",
+        id_equipo=10,
+        fecha_prestamo=hoy - timedelta(days=2),
+        fecha_devolucion_esperada=hoy + timedelta(days=5),
+    )
+    equipo = Equipo(id=10, nombre="Osciloscopio", secuencial="EQ-020", mantenimiento=False, id_categoria=1)
+    mock_prestamo_repo.get_by_id.return_value = prestamo
+    mock_equipo_repo.get_by_id.return_value = equipo
+
+    datos = DevolucionCreate(
+        fecha_devolucion=None,
+        novedades="Todo en orden",
+        enviar_a_mantenimiento=False,
+    )
+
+    resultado = service.registrar_devolucion(3, datos)
+
+    assert resultado.devolucion.fecha_devolucion == hoy
+
+
+def test_registrar_devolucion_prestamo_inexistente_lanza_error(
+    service, mock_prestamo_repo
+):
+    """RN-DEV-01: Lanza PrestamoNotFoundError si el préstamo no existe."""
+    mock_prestamo_repo.get_by_id.return_value = None
+    datos = DevolucionCreate(enviar_a_mantenimiento=False)
+
+    with pytest.raises(PrestamoNotFoundError) as exc_info:
+        service.registrar_devolucion(999, datos)
+
+    assert "999" in str(exc_info.value)
+
+
+def test_registrar_devolucion_prestamo_ya_devuelto_lanza_error(
+    service, mock_prestamo_repo
+):
+    """RN-DEV-02: Lanza PrestamoValidationError si el préstamo ya fue devuelto."""
+    hoy = date.today()
+    prestamo = Prestamo(
+        id=4,
+        cedula_persona="1001234567",
+        id_equipo=10,
+        fecha_prestamo=hoy - timedelta(days=5),
+        fecha_devolucion_esperada=hoy,
+    )
+    prestamo.devolucion = Devolucion(id_prestamo=4, fecha_devolucion=hoy, novedades=None)
+    mock_prestamo_repo.get_by_id.return_value = prestamo
+
+    datos = DevolucionCreate(enviar_a_mantenimiento=False)
+
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.registrar_devolucion(4, datos)
+
+    assert "ya fue devuelto previamente" in str(exc_info.value)
+
+
+def test_registrar_devolucion_fecha_futura_lanza_error(
+    service, mock_prestamo_repo
+):
+    """RN-DEV-03: Lanza PrestamoValidationError si la fecha de devolución es futura."""
+    hoy = date.today()
+    prestamo = Prestamo(
+        id=5,
+        cedula_persona="1001234567",
+        id_equipo=10,
+        fecha_prestamo=hoy - timedelta(days=2),
+        fecha_devolucion_esperada=hoy + timedelta(days=5),
+    )
+    mock_prestamo_repo.get_by_id.return_value = prestamo
+
+    datos = DevolucionCreate(
+        fecha_devolucion=hoy + timedelta(days=1),
+        enviar_a_mantenimiento=False,
+    )
+
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.registrar_devolucion(5, datos)
+
+    assert "no puede ser posterior a la fecha actual" in str(exc_info.value)
+
+
+def test_registrar_devolucion_fecha_anterior_a_prestamo_lanza_error(
+    service, mock_prestamo_repo
+):
+    """RN-DEV-03: Lanza PrestamoValidationError si la fecha de devolución es anterior al inicio del préstamo."""
+    hoy = date.today()
+    prestamo = Prestamo(
+        id=6,
+        cedula_persona="1001234567",
+        id_equipo=10,
+        fecha_prestamo=hoy - timedelta(days=2),
+        fecha_devolucion_esperada=hoy + timedelta(days=5),
+    )
+    mock_prestamo_repo.get_by_id.return_value = prestamo
+
+    datos = DevolucionCreate(
+        fecha_devolucion=hoy - timedelta(days=3),
+        enviar_a_mantenimiento=False,
+    )
+
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.registrar_devolucion(6, datos)
+
+    assert "no puede ser anterior a la fecha de inicio del préstamo" in str(exc_info.value)
+
+
+def test_registrar_devolucion_mantenimiento_sin_novedades_lanza_error(
+    service, mock_prestamo_repo
+):
+    """RN-DEV-04: Lanza PrestamoValidationError si se envía a mantenimiento sin novedades."""
+    hoy = date.today()
+    prestamo = Prestamo(
+        id=7,
+        cedula_persona="1001234567",
+        id_equipo=10,
+        fecha_prestamo=hoy - timedelta(days=2),
+        fecha_devolucion_esperada=hoy + timedelta(days=5),
+    )
+    mock_prestamo_repo.get_by_id.return_value = prestamo
+
+    # Con novedades=None
+    datos1 = DevolucionCreate(
+        fecha_devolucion=hoy,
+        novedades=None,
+        enviar_a_mantenimiento=True,
+    )
+    with pytest.raises(PrestamoValidationError) as exc_info1:
+        service.registrar_devolucion(7, datos1)
+
+    assert "Debe registrar las novedades" in str(exc_info1.value)
+
+    # Con novedades solo espacios en blanco
+    datos2 = DevolucionCreate(
+        fecha_devolucion=hoy,
+        novedades="   ",
+        enviar_a_mantenimiento=True,
+    )
+    with pytest.raises(PrestamoValidationError) as exc_info2:
+        service.registrar_devolucion(7, datos2)
+
+    assert "Debe registrar las novedades" in str(exc_info2.value)
+
+
+def test_registrar_devolucion_equipo_no_encontrado_lanza_error(
+    service, mock_prestamo_repo, mock_equipo_repo
+):
+    """RN-DEV-05: Lanza PrestamoValidationError si el equipo asociado no existe."""
+    hoy = date.today()
+    prestamo = Prestamo(
+        id=8,
+        cedula_persona="1001234567",
+        id_equipo=999,
+        fecha_prestamo=hoy - timedelta(days=2),
+        fecha_devolucion_esperada=hoy + timedelta(days=5),
+    )
+    mock_prestamo_repo.get_by_id.return_value = prestamo
+    mock_equipo_repo.get_by_id.return_value = None
+
+    datos = DevolucionCreate(
+        fecha_devolucion=hoy,
+        enviar_a_mantenimiento=False,
+    )
+
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.registrar_devolucion(8, datos)
+
+    assert "no fue encontrado" in str(exc_info.value)

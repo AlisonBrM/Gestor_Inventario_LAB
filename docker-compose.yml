@@ -1,0 +1,23 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: lab_inventory_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: lab_inventory
+      MYSQL_USER: lab_user
+      MYSQL_PASSWORD: lab_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "lab_user", "-plab_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_data:
+    driver: local

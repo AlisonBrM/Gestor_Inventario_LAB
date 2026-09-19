@@ -1,0 +1,35 @@
+# Python & venv
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+backend/venv/
+backend/.venv/
+venv/
+.venv/
+
+# Environment variables
+.env
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# Node & Frontend
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+*.local
+
+# Logs and databases
+*.log
+mysql_data/
+
+# OS and Editor
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

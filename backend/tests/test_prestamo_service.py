@@ -1,0 +1,440 @@
+from datetime import date, timedelta
+from unittest.mock import create_autospec
+import pytest
+
+from app.models.categoria import Categoria
+from app.models.equipo import Equipo
+from app.models.persona import Persona
+from app.models.prestamo import Prestamo
+from app.repositories.categoria_repository import CategoriaRepository
+from app.repositories.equipo_repository import EquipoRepository
+from app.repositories.persona_repository import PersonaRepository
+from app.repositories.prestamo_repository import PrestamoRepository
+from app.schemas.prestamo import PrestamoCreate
+from app.services.prestamo_service import (
+    PrestamoNotFoundError,
+    PrestamoService,
+    PrestamoValidationError,
+)
+
+
+@pytest.fixture
+def mock_prestamo_repo():
+    return create_autospec(PrestamoRepository, instance=True)
+
+
+@pytest.fixture
+def mock_persona_repo():
+    return create_autospec(PersonaRepository, instance=True)
+
+
+@pytest.fixture
+def mock_equipo_repo():
+    return create_autospec(EquipoRepository, instance=True)
+
+
+@pytest.fixture
+def mock_categoria_repo():
+    return create_autospec(CategoriaRepository, instance=True)
+
+
+@pytest.fixture
+def service(mock_prestamo_repo, mock_persona_repo, mock_equipo_repo, mock_categoria_repo):
+    return PrestamoService(
+        prestamo_repository=mock_prestamo_repo,
+        persona_repository=mock_persona_repo,
+        equipo_repository=mock_equipo_repo,
+        categoria_repository=mock_categoria_repo,
+    )
+
+
+# =========================================================================
+# 1. Pruebas de Creación Exitosa y Cálculo de Fechas (RN-PREST-05)
+# =========================================================================
+
+def test_crear_prestamo_exitoso(
+    service, mock_prestamo_repo, mock_persona_repo, mock_equipo_repo, mock_categoria_repo
+):
+    """Verifica que un préstamo válido se crea calculando fecha_devolucion_esperada."""
+    hoy = date.today()
+    mock_persona_repo.get_by_cedula.return_value = Persona(
+        cedula="1001234567",
+        nombre_completo="Carlos Pérez",
+        tipo_persona="estudiante",
+        telefono="3001234567",
+        facultad="Ingeniería",
+        activo=True,
+    )
+    mock_prestamo_repo.get_prestamos_no_devueltos_por_persona.return_value = []
+    mock_equipo_repo.get_by_id.return_value = Equipo(
+        id=1,
+        id_categoria=2,
+        nombre="Osciloscopio",
+        secuencial="OSC-01",
+        mantenimiento=False,
+        activo=True,
+    )
+    mock_prestamo_repo.get_prestamo_activo_por_equipo.return_value = None
+    mock_categoria_repo.get_by_id.return_value = Categoria(
+        id=2, nombre="Electrónica", plazo_entrega=15, activo=True
+    )
+
+    def simular_creacion(prestamo: Prestamo) -> Prestamo:
+        prestamo.id = 10
+        return prestamo
+
+    mock_prestamo_repo.create.side_effect = simular_creacion
+
+    datos = PrestamoCreate(cedula_persona="1001234567", id_equipo=1, fecha_prestamo=hoy)
+    resultado = service.crear_prestamo(datos)
+
+    assert resultado.id == 10
+    assert resultado.cedula_persona == "1001234567"
+    assert resultado.id_equipo == 1
+    assert resultado.fecha_prestamo == hoy
+    assert resultado.fecha_devolucion_esperada == hoy + timedelta(days=15)
+    mock_prestamo_repo.create.assert_called_once()
+
+
+# =========================================================================
+# 2. RN-PREST-01: Préstamo vencido sin devolver
+# =========================================================================
+
+def test_crear_prestamo_rechaza_solicitante_con_prestamo_vencido_sin_devolver(
+    service, mock_prestamo_repo, mock_persona_repo
+):
+    """RN-PREST-01: Rechaza el préstamo si el solicitante tiene un préstamo vencido no devuelto."""
+    hoy = date.today()
+    mock_persona_repo.get_by_cedula.return_value = Persona(
+        cedula="1001234567",
+        nombre_completo="Carlos Pérez",
+        tipo_persona="estudiante",
+        telefono="3001234567",
+        facultad="Ingeniería",
+        activo=True,
+    )
+
+    prestamo_vencido = Prestamo(
+        id=5,
+        cedula_persona="1001234567",
+        id_equipo=2,
+        fecha_prestamo=hoy - timedelta(days=30),
+        fecha_devolucion_esperada=hoy - timedelta(days=10),
+    )
+    mock_prestamo_repo.get_prestamos_no_devueltos_por_persona.return_value = [prestamo_vencido]
+
+    datos = PrestamoCreate(cedula_persona="1001234567", id_equipo=1, fecha_prestamo=hoy)
+
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.crear_prestamo(datos)
+
+    assert "préstamo vencido sin devolver" in str(exc_info.value)
+    mock_prestamo_repo.create.assert_not_called()
+
+
+def test_crear_prestamo_permite_si_prestamos_vencidos_fueron_devueltos(
+    service, mock_prestamo_repo, mock_persona_repo, mock_equipo_repo, mock_categoria_repo
+):
+    """Permite el préstamo si los préstamos previos ya fueron devueltos."""
+    hoy = date.today()
+    mock_persona_repo.get_by_cedula.return_value = Persona(
+        cedula="1001234567",
+        nombre_completo="Carlos Pérez",
+        tipo_persona="estudiante",
+        telefono="3001234567",
+        facultad="Ingeniería",
+        activo=True,
+    )
+    # Lista vacía porque todos los anteriores fueron devueltos
+    mock_prestamo_repo.get_prestamos_no_devueltos_por_persona.return_value = []
+    mock_equipo_repo.get_by_id.return_value = Equipo(
+        id=1, id_categoria=1, nombre="Multímetro", secuencial="MUL-01", mantenimiento=False, activo=True
+    )
+    mock_prestamo_repo.get_prestamo_activo_por_equipo.return_value = None
+    mock_categoria_repo.get_by_id.return_value = Categoria(
+        id=1, nombre="General", plazo_entrega=7, activo=True
+    )
+    mock_prestamo_repo.create.side_effect = lambda p: p
+
+    datos = PrestamoCreate(cedula_persona="1001234567", id_equipo=1, fecha_prestamo=hoy)
+    resultado = service.crear_prestamo(datos)
+
+    assert resultado.fecha_devolucion_esperada == hoy + timedelta(days=7)
+
+
+def test_crear_prestamo_permite_si_prestamos_vigentes_no_estan_vencidos(
+    service, mock_prestamo_repo, mock_persona_repo, mock_equipo_repo, mock_categoria_repo
+):
+    """Permite el préstamo si el solicitante tiene un préstamo activo que todavía no ha vencido."""
+    hoy = date.today()
+    mock_persona_repo.get_by_cedula.return_value = Persona(
+        cedula="1001234567",
+        nombre_completo="Carlos Pérez",
+        tipo_persona="estudiante",
+        telefono="3001234567",
+        facultad="Ingeniería",
+        activo=True,
+    )
+
+    prestamo_vigente = Prestamo(
+        id=3,
+        cedula_persona="1001234567",
+        id_equipo=2,
+        fecha_prestamo=hoy - timedelta(days=2),
+        fecha_devolucion_esperada=hoy + timedelta(days=5),
+    )
+    mock_prestamo_repo.get_prestamos_no_devueltos_por_persona.return_value = [prestamo_vigente]
+    mock_equipo_repo.get_by_id.return_value = Equipo(
+        id=1, id_categoria=1, nombre="Multímetro", secuencial="MUL-01", mantenimiento=False, activo=True
+    )
+    mock_prestamo_repo.get_prestamo_activo_por_equipo.return_value = None
+    mock_categoria_repo.get_by_id.return_value = Categoria(
+        id=1, nombre="General", plazo_entrega=7, activo=True
+    )
+    mock_prestamo_repo.create.side_effect = lambda p: p
+
+    datos = PrestamoCreate(cedula_persona="1001234567", id_equipo=1, fecha_prestamo=hoy)
+    resultado = service.crear_prestamo(datos)
+
+    assert resultado.fecha_devolucion_esperada == hoy + timedelta(days=7)
+
+
+# =========================================================================
+# 3. RN-PREST-02: Equipo marcado en mantenimiento
+# =========================================================================
+
+def test_crear_prestamo_rechaza_equipo_en_mantenimiento(
+    service, mock_prestamo_repo, mock_persona_repo, mock_equipo_repo
+):
+    """RN-PREST-02: Rechaza prestar un equipo marcado en mantenimiento."""
+    mock_persona_repo.get_by_cedula.return_value = Persona(
+        cedula="1001234567",
+        nombre_completo="Carlos Pérez",
+        tipo_persona="estudiante",
+        telefono="3001234567",
+        facultad="Ingeniería",
+        activo=True,
+    )
+    mock_prestamo_repo.get_prestamos_no_devueltos_por_persona.return_value = []
+    mock_equipo_repo.get_by_id.return_value = Equipo(
+        id=1,
+        id_categoria=1,
+        nombre="Generador de Señales",
+        secuencial="GEN-01",
+        mantenimiento=True,
+        activo=True,
+    )
+
+    datos = PrestamoCreate(cedula_persona="1001234567", id_equipo=1)
+
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.crear_prestamo(datos)
+
+    assert "mantenimiento" in str(exc_info.value)
+    mock_prestamo_repo.create.assert_not_called()
+
+
+# =========================================================================
+# 4. RN-PREST-03: Disponibilidad de equipo (ya prestado)
+# =========================================================================
+
+def test_crear_prestamo_rechaza_equipo_ya_prestado(
+    service, mock_prestamo_repo, mock_persona_repo, mock_equipo_repo
+):
+    """RN-PREST-03: Rechaza si el equipo ya está prestado a alguien y no ha sido devuelto."""
+    hoy = date.today()
+    mock_persona_repo.get_by_cedula.return_value = Persona(
+        cedula="1001234567",
+        nombre_completo="Carlos Pérez",
+        tipo_persona="estudiante",
+        telefono="3001234567",
+        facultad="Ingeniería",
+        activo=True,
+    )
+    mock_prestamo_repo.get_prestamos_no_devueltos_por_persona.return_value = []
+    mock_equipo_repo.get_by_id.return_value = Equipo(
+        id=1,
+        id_categoria=1,
+        nombre="Fuente de Poder",
+        secuencial="FTE-01",
+        mantenimiento=False,
+        activo=True,
+    )
+    mock_prestamo_repo.get_prestamo_activo_por_equipo.return_value = Prestamo(
+        id=99,
+        cedula_persona="99999999",
+        id_equipo=1,
+        fecha_prestamo=hoy - timedelta(days=2),
+        fecha_devolucion_esperada=hoy + timedelta(days=5),
+    )
+
+    datos = PrestamoCreate(cedula_persona="1001234567", id_equipo=1)
+
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.crear_prestamo(datos)
+
+    assert "ya se encuentra actualmente prestado" in str(exc_info.value)
+    mock_prestamo_repo.create.assert_not_called()
+
+
+# =========================================================================
+# 5. RN-PREST-04: Estados y Existencias de Persona, Equipo y Categoría
+# =========================================================================
+
+def test_crear_prestamo_rechaza_persona_inexistente(service, mock_persona_repo):
+    """RN-PREST-04: Lanza PrestamoNotFoundError si la cédula no existe."""
+    mock_persona_repo.get_by_cedula.return_value = None
+    datos = PrestamoCreate(cedula_persona="00000000", id_equipo=1)
+
+    with pytest.raises(PrestamoNotFoundError):
+        service.crear_prestamo(datos)
+
+
+def test_crear_prestamo_rechaza_persona_inactiva(service, mock_persona_repo):
+    """RN-PREST-04: Lanza PrestamoValidationError si la persona está inactiva."""
+    mock_persona_repo.get_by_cedula.return_value = Persona(
+        cedula="1001234567",
+        nombre_completo="Persona Inactiva",
+        tipo_persona="estudiante",
+        telefono="3001234567",
+        facultad="Ingeniería",
+        activo=False,
+    )
+    datos = PrestamoCreate(cedula_persona="1001234567", id_equipo=1)
+
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.crear_prestamo(datos)
+
+    assert "inactiva" in str(exc_info.value)
+
+
+def test_crear_prestamo_rechaza_equipo_inexistente(
+    service, mock_prestamo_repo, mock_persona_repo, mock_equipo_repo
+):
+    """RN-PREST-04: Lanza PrestamoNotFoundError si el equipo no existe."""
+    mock_persona_repo.get_by_cedula.return_value = Persona(
+        cedula="1001234567",
+        nombre_completo="Carlos Pérez",
+        tipo_persona="estudiante",
+        telefono="3001234567",
+        facultad="Ingeniería",
+        activo=True,
+    )
+    mock_prestamo_repo.get_prestamos_no_devueltos_por_persona.return_value = []
+    mock_equipo_repo.get_by_id.return_value = None
+
+    datos = PrestamoCreate(cedula_persona="1001234567", id_equipo=999)
+
+    with pytest.raises(PrestamoNotFoundError):
+        service.crear_prestamo(datos)
+
+
+def test_crear_prestamo_rechaza_equipo_inactivo(
+    service, mock_prestamo_repo, mock_persona_repo, mock_equipo_repo
+):
+    """RN-PREST-04: Lanza PrestamoValidationError si el equipo está inactivo."""
+    mock_persona_repo.get_by_cedula.return_value = Persona(
+        cedula="1001234567",
+        nombre_completo="Carlos Pérez",
+        tipo_persona="estudiante",
+        telefono="3001234567",
+        facultad="Ingeniería",
+        activo=True,
+    )
+    mock_prestamo_repo.get_prestamos_no_devueltos_por_persona.return_value = []
+    mock_equipo_repo.get_by_id.return_value = Equipo(
+        id=1,
+        id_categoria=1,
+        nombre="Equipo Inactivo",
+        secuencial="INACT-01",
+        mantenimiento=False,
+        activo=False,
+    )
+
+    datos = PrestamoCreate(cedula_persona="1001234567", id_equipo=1)
+
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.crear_prestamo(datos)
+
+    assert "inactivo" in str(exc_info.value)
+
+
+def test_crear_prestamo_rechaza_categoria_inactiva(
+    service, mock_prestamo_repo, mock_persona_repo, mock_equipo_repo, mock_categoria_repo
+):
+    """RN-PREST-04: Lanza PrestamoValidationError si la categoría del equipo está inactiva."""
+    mock_persona_repo.get_by_cedula.return_value = Persona(
+        cedula="1001234567",
+        nombre_completo="Carlos Pérez",
+        tipo_persona="estudiante",
+        telefono="3001234567",
+        facultad="Ingeniería",
+        activo=True,
+    )
+    mock_prestamo_repo.get_prestamos_no_devueltos_por_persona.return_value = []
+    mock_equipo_repo.get_by_id.return_value = Equipo(
+        id=1,
+        id_categoria=5,
+        nombre="Equipo Válido",
+        secuencial="VAL-01",
+        mantenimiento=False,
+        activo=True,
+    )
+    mock_prestamo_repo.get_prestamo_activo_por_equipo.return_value = None
+    mock_categoria_repo.get_by_id.return_value = Categoria(
+        id=5, nombre="Categoría Inactiva", plazo_entrega=10, activo=False
+    )
+
+    datos = PrestamoCreate(cedula_persona="1001234567", id_equipo=1)
+
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.crear_prestamo(datos)
+
+    assert "inactiva" in str(exc_info.value)
+
+
+# =========================================================================
+# 6. RN-PREST-06: Fecha de préstamo futura
+# =========================================================================
+
+def test_crear_prestamo_rechaza_fecha_futura(service):
+    """RN-PREST-06: Rechaza fechas de préstamo posteriores a la fecha actual."""
+    fecha_futura = date.today() + timedelta(days=2)
+    datos = PrestamoCreate(
+        cedula_persona="1001234567",
+        id_equipo=1,
+        fecha_prestamo=fecha_futura,
+    )
+
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.crear_prestamo(datos)
+
+    assert "posterior a la fecha actual" in str(exc_info.value)
+
+
+# =========================================================================
+# 7. Obtener Préstamo por ID
+# =========================================================================
+
+def test_obtener_prestamo_por_id_exitoso(service, mock_prestamo_repo):
+    """Obtiene un préstamo existente por su ID."""
+    mock_prestamo = Prestamo(
+        id=10,
+        cedula_persona="1001234567",
+        id_equipo=1,
+        fecha_prestamo=date.today(),
+        fecha_devolucion_esperada=date.today() + timedelta(days=7),
+    )
+    mock_prestamo_repo.get_by_id.return_value = mock_prestamo
+
+    resultado = service.obtener_prestamo_por_id(10)
+    assert resultado.id == 10
+    assert resultado.cedula_persona == "1001234567"
+
+
+def test_obtener_prestamo_por_id_inexistente(service, mock_prestamo_repo):
+    """Lanza PrestamoNotFoundError si el ID no existe."""
+    mock_prestamo_repo.get_by_id.return_value = None
+
+    with pytest.raises(PrestamoNotFoundError):
+        service.obtener_prestamo_por_id(999)

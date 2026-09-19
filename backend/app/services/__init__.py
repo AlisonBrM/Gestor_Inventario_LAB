@@ -17,6 +17,11 @@ from app.services.persona_service import (
     PersonaAlreadyExistsError,
     PersonaValidationError,
 )
+from app.services.prestamo_service import (
+    PrestamoService,
+    PrestamoNotFoundError,
+    PrestamoValidationError,
+)
 
 __all__ = [
     "CategoriaService",
@@ -31,4 +36,7 @@ __all__ = [
     "PersonaNotFoundError",
     "PersonaAlreadyExistsError",
     "PersonaValidationError",
+    "PrestamoService",
+    "PrestamoNotFoundError",
+    "PrestamoValidationError",
 ]

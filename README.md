@@ -181,6 +181,12 @@ La aplicación estará disponible en [http://localhost:5173](http://localhost:51
 | `PUT` | `/api/personas/{cedula}` | Path: `cedula`, Body JSON: `PersonaUpdate` | Actualiza los datos de una persona (la cédula es inmutable) | `200 OK`, `400 Bad Request`, `404 Not Found` |
 | `DELETE` | `/api/personas/{cedula}` | Path: `cedula` (string) | Borrado lógico: establece `activo = False` | `200 OK`, `400 Bad Request`, `404 Not Found` |
 
+### Módulo de Préstamos (`/api/prestamos`)
+| Método | Ruta | Parámetros / Body | Descripción | Códigos de Respuesta |
+|---|---|---|---|---|
+| `POST` | `/api/prestamos` | Body JSON: `PrestamoCreate` | Registra un nuevo préstamo validando reglas de negocio (solicitante sin préstamos vencidos, equipo operativo, etc.) y calcula la fecha de devolución esperada | `201 Created`, `400 Bad Request`, `404 Not Found`, `422 Unprocessable Content` |
+| `GET` | `/api/prestamos/{id}` | Path: `id` (entero) | Retorna los datos detallados de un préstamo por su ID | `200 OK`, `404 Not Found` |
+
 ---
 
 ## Cómo Probar las Funcionalidades
@@ -198,7 +204,7 @@ La aplicación estará disponible en [http://localhost:5173](http://localhost:51
    ```
 
 ### 2. Pruebas manuales desde el Frontend:
-Abre [http://localhost:5173](http://localhost:5173) en el navegador. La aplicación cuenta con navegación por pestañas en la parte superior: **👤 Personas**, **📦 Equipos de Laboratorio** y **🏷️ Categorías**.
+Abre [http://localhost:5173](http://localhost:5173) en el navegador. La aplicación cuenta con navegación por pestañas en la parte superior: **👤 Personas**, **📦 Equipos de Laboratorio**, **🏷️ Categorías** y **📋 Préstamos**.
 
 #### A. Pruebas del Módulo de Personas:
 - Cambia a la pestaña **👤 Personas**.
@@ -260,3 +266,28 @@ Abre [http://localhost:5173](http://localhost:5173) en el navegador. La aplicaci
   - Puedes desmarcar/marcar **Equipo Activo** para gestionar su reactivación.
 - **Borrado Lógico:**
   - Haz clic en 🗑️ **Desactivar**. El equipo se marcará como `Inactivo` (`activo = false`) preservando su registro en la base de datos.
+
+#### D. Pruebas del Módulo de Préstamos:
+- Cambia a la pestaña **📋 Préstamos**.
+- **Crear un Préstamo Exitoso:**
+  - Selecciona un solicitante activo en el menú desplegable (o escribe su cédula en el campo correspondiente).
+  - Selecciona un equipo operativo (`✅ [Operativo]`) perteneciente a una categoría activa.
+  - Verifica o ajusta la fecha de inicio del préstamo (por defecto la fecha de hoy).
+  - Haz clic en **+ Registrar Préstamo**.
+  - Observa el mensaje de éxito y la tarjeta verde con los detalles del préstamo:
+    - ID asignado.
+    - Nombre y cédula del solicitante.
+    - Nombre, secuencial y categoría del equipo.
+    - **Fecha de Devolución Esperada** calculada automáticamente sumando los días de plazo de la categoría a la fecha de préstamo.
+- **Validación de Regla de Negocio 1 (Solicitante con préstamo vencido sin devolver):**
+  - Si un solicitante tiene un préstamo cuya fecha esperada de devolución ya venció y no ha sido devuelto, intenta registrar un nuevo préstamo para él.
+  - El sistema rechazará inmediatamente la solicitud con un mensaje de alerta: *"El solicitante con cédula '...' tiene un préstamo vencido sin devolver (Préstamo #X, fecha límite esperada: YYYY-MM-DD). No puede solicitar otro equipo hasta devolver los equipos vencidos."*
+- **Validación de Regla de Negocio 2 (Equipo en mantenimiento):**
+  - Ve a la pestaña **📦 Equipos de Laboratorio**, edita cualquier equipo y marca la casilla **En Mantenimiento**.
+  - Regresa a la pestaña **📋 Préstamos** y selecciona ese equipo (marcado como `⚠️ [EN MANTENIMIENTO]`).
+  - Haz clic en **+ Registrar Préstamo**.
+  - El sistema rechazará la creación con el mensaje de error: *"El equipo '...' se encuentra marcado en mantenimiento. No puede ser prestado."*
+- **Validación de Reglas Adicionales:**
+  - **Equipo ya prestado:** Intenta prestar un equipo que ya fue asignado en un préstamo activo no devuelto; el sistema impedirá el préstamo duplicado.
+  - **Persona o Equipo inactivo:** Si se ingresa la cédula de una persona inactiva o se intenta prestar un equipo inactivo, el sistema rechazará la operación.
+  - **Fecha futura:** Si se ingresa una fecha posterior al día actual, el sistema lo rechazará indicando que no se admiten fechas futuras.

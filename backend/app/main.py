@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import init_db
-from app.routers import categoria_router, equipo_router, persona_router
+from app.routers import categoria_router, equipo_router, persona_router, prestamo_router
 
 
 @asynccontextmanager
@@ -36,6 +36,7 @@ app.add_middleware(
 app.include_router(categoria_router, prefix=settings.API_PREFIX)
 app.include_router(equipo_router, prefix=settings.API_PREFIX)
 app.include_router(persona_router, prefix=settings.API_PREFIX)
+app.include_router(prestamo_router, prefix=settings.API_PREFIX)
 
 
 @app.get("/")

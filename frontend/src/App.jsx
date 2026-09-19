@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Categorias from './components/Categorias';
 import Equipos from './components/Equipos';
 import Personas from './components/Personas';
+import Prestamos from './components/Prestamos';
 
 function App() {
   const [seccionActiva, setSeccionActiva] = useState('personas');
@@ -55,12 +56,19 @@ function App() {
         >
           🏷️ Categorías
         </button>
+        <button
+          className={`tab-btn ${seccionActiva === 'prestamos' ? 'active' : ''}`}
+          onClick={() => setSeccionActiva('prestamos')}
+        >
+          📋 Préstamos
+        </button>
       </nav>
 
       <main className="app-main">
         {seccionActiva === 'personas' && <Personas />}
         {seccionActiva === 'equipos' && <Equipos />}
         {seccionActiva === 'categorias' && <Categorias />}
+        {seccionActiva === 'prestamos' && <Prestamos />}
       </main>
     </div>
   );

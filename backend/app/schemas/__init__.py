@@ -18,6 +18,10 @@ from app.schemas.persona import (
     PersonaResponse,
     TipoPersona,
 )
+from app.schemas.prestamo import (
+    PrestamoCreate,
+    PrestamoResponse,
+)
 
 __all__ = [
     "CategoriaBase",
@@ -32,5 +36,7 @@ __all__ = [
     "PersonaCreate",
     "PersonaUpdate",
     "PersonaResponse",
+    "PrestamoCreate",
+    "PrestamoResponse",
     "TipoPersona",
 ]

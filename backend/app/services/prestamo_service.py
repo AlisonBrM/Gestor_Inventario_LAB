@@ -1,0 +1,150 @@
+from datetime import date, timedelta
+from typing import Optional
+
+from app.models.prestamo import Prestamo
+from app.repositories.categoria_repository import CategoriaRepository
+from app.repositories.equipo_repository import EquipoRepository
+from app.repositories.persona_repository import PersonaRepository
+from app.repositories.prestamo_repository import PrestamoRepository
+from app.schemas.prestamo import PrestamoCreate
+
+
+class PrestamoNotFoundError(Exception):
+    """Lanzada cuando un préstamo, persona o equipo no existe."""
+
+    def __init__(self, identificador: str | int) -> None:
+        if isinstance(identificador, int):
+            super().__init__(f"Préstamo con ID {identificador} no encontrado.")
+            self.identificador = identificador
+        else:
+            super().__init__(identificador)
+            self.identificador = identificador
+
+
+class PrestamoValidationError(Exception):
+    """Lanzada cuando falla una regla o validación de dominio del préstamo."""
+
+    def __init__(self, mensaje: str) -> None:
+        super().__init__(mensaje)
+        self.mensaje = mensaje
+
+
+class PrestamoService:
+    """Servicio con la lógica y reglas de negocio para Préstamos."""
+
+    def __init__(
+        self,
+        prestamo_repository: PrestamoRepository,
+        persona_repository: PersonaRepository,
+        equipo_repository: EquipoRepository,
+        categoria_repository: CategoriaRepository,
+    ) -> None:
+        self.prestamo_repository = prestamo_repository
+        self.persona_repository = persona_repository
+        self.equipo_repository = equipo_repository
+        self.categoria_repository = categoria_repository
+
+    def obtener_prestamo_por_id(self, prestamo_id: int) -> Prestamo:
+        """Obtiene un préstamo por su ID o lanza PrestamoNotFoundError."""
+        prestamo = self.prestamo_repository.get_by_id(prestamo_id)
+        if not prestamo:
+            raise PrestamoNotFoundError(prestamo_id)
+        return prestamo
+
+    def crear_prestamo(self, datos: PrestamoCreate) -> Prestamo:
+        """Crea un nuevo préstamo aplicando todas las reglas de negocio.
+
+        Reglas aplicadas:
+        - RN-PREST-01: Un solicitante con un préstamo vencido sin devolver no puede pedir otro equipo.
+        - RN-PREST-02: Un equipo marcado en mantenimiento no puede ser prestado.
+        - RN-PREST-03: Un equipo ya prestado y no devuelto no puede ser prestado simultáneamente.
+        - RN-PREST-04: Solicitante, equipo y categoría deben existir y estar activos.
+        - RN-PREST-05: Cálculo automático de fecha de devolución esperada = fecha_prestamo + categoría.plazo_entrega.
+        - RN-PREST-06: La fecha del préstamo no puede ser posterior a la fecha actual.
+        """
+        fecha_inicio = datos.fecha_prestamo or date.today()
+
+        # RN-PREST-06: Validación de fecha de préstamo
+        if fecha_inicio > date.today():
+            raise PrestamoValidationError(
+                "La fecha de inicio del préstamo no puede ser posterior a la fecha actual."
+            )
+
+        # RN-PREST-04: Validar existencia y estado de la persona
+        persona = self.persona_repository.get_by_cedula(datos.cedula_persona)
+        if not persona:
+            raise PrestamoNotFoundError(
+                f"La persona con cédula '{datos.cedula_persona}' no existe en el sistema."
+            )
+        if not persona.activo:
+            raise PrestamoValidationError(
+                f"La persona '{persona.nombre_completo}' (cédula: {datos.cedula_persona}) "
+                "se encuentra inactiva. No puede solicitar préstamos."
+            )
+
+        # RN-PREST-01: Verificar si el solicitante tiene préstamos vencidos sin devolver
+        prestamos_pendientes = (
+            self.prestamo_repository.get_prestamos_no_devueltos_por_persona(
+                datos.cedula_persona
+            )
+        )
+        for p in prestamos_pendientes:
+            if p.fecha_devolucion_esperada < fecha_inicio:
+                raise PrestamoValidationError(
+                    f"El solicitante con cédula '{datos.cedula_persona}' tiene un préstamo vencido "
+                    f"sin devolver (Préstamo #{p.id}, fecha límite esperada: {p.fecha_devolucion_esperada}). "
+                    "No puede solicitar otro equipo hasta devolver los equipos vencidos."
+                )
+
+        # RN-PREST-04: Validar existencia y estado del equipo
+        equipo = self.equipo_repository.get_by_id(datos.id_equipo)
+        if not equipo:
+            raise PrestamoNotFoundError(
+                f"El equipo con ID {datos.id_equipo} no existe en el sistema."
+            )
+        if not equipo.activo:
+            raise PrestamoValidationError(
+                f"El equipo '{equipo.nombre}' (ID: {datos.id_equipo}) se encuentra inactivo."
+            )
+
+        # RN-PREST-02: Validar si el equipo está en mantenimiento
+        if equipo.mantenimiento:
+            raise PrestamoValidationError(
+                f"El equipo '{equipo.nombre}' (secuencial: {equipo.secuencial}) "
+                "se encuentra marcado en mantenimiento. No puede ser prestado."
+            )
+
+        # RN-PREST-03: Validar que el equipo no esté prestado actualmente
+        prestamo_activo_equipo = (
+            self.prestamo_repository.get_prestamo_activo_por_equipo(datos.id_equipo)
+        )
+        if prestamo_activo_equipo:
+            raise PrestamoValidationError(
+                f"El equipo '{equipo.nombre}' (secuencial: {equipo.secuencial}) "
+                f"ya se encuentra actualmente prestado (Préstamo #{prestamo_activo_equipo.id}) "
+                "y no ha sido devuelto."
+            )
+
+        # RN-PREST-04: Validar categoría asociada al equipo
+        categoria = self.categoria_repository.get_by_id(equipo.id_categoria)
+        if not categoria:
+            raise PrestamoValidationError(
+                f"La categoría con ID {equipo.id_categoria} asociada al equipo no existe."
+            )
+        if not categoria.activo:
+            raise PrestamoValidationError(
+                f"La categoría '{categoria.nombre}' asociada al equipo se encuentra inactiva. "
+                "No es posible prestar equipos pertenecientes a una categoría inactiva."
+            )
+
+        # RN-PREST-05: Cálculo automático de la fecha de devolución esperada
+        fecha_devolucion_esperada = fecha_inicio + timedelta(days=categoria.plazo_entrega)
+
+        nuevo_prestamo = Prestamo(
+            cedula_persona=datos.cedula_persona.strip(),
+            id_equipo=datos.id_equipo,
+            fecha_prestamo=fecha_inicio,
+            fecha_devolucion_esperada=fecha_devolucion_esperada,
+        )
+
+        return self.prestamo_repository.create(nuevo_prestamo)

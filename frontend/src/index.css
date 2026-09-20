@@ -164,6 +164,16 @@ button {
   background-color: #fde68a;
 }
 
+.btn-success {
+  background-color: #dcfce7;
+  color: #166534;
+  margin-right: 0.4rem;
+}
+
+.btn-success:hover {
+  background-color: #bbf7d0;
+}
+
 .btn-danger {
   background-color: #fee2e2;
   color: #b91c1c;

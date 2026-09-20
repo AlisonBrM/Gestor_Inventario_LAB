@@ -158,3 +158,27 @@ class EquipoService:
         """RN-EQ-06: Borrado lógico del equipo (activo = False)."""
         equipo = self.obtener_equipo_por_id(equipo_id)
         return self.repository.delete_logical(equipo)
+
+    def sacar_de_mantenimiento(self, equipo_id: int) -> Equipo:
+        """Marca un equipo como disponible cambiando su estado de mantenimiento a False.
+
+        Reglas aplicadas:
+        - RN-EQ-MANT-01: El equipo debe existir en el sistema (o lanza EquipoNotFoundError).
+        - RN-EQ-MANT-02: El equipo debe encontrarse actualmente en mantenimiento (mantenimiento == True).
+        - RN-EQ-MANT-03: El equipo debe encontrarse activo (activo == True).
+        - RN-EQ-MANT-04: Se actualiza el estado a mantenimiento = False y se persiste en base de datos.
+        """
+        equipo = self.obtener_equipo_por_id(equipo_id)
+
+        if not equipo.activo:
+            raise EquipoValidationError(
+                f"No es posible sacar de mantenimiento el equipo '{equipo.nombre}' porque se encuentra inactivo."
+            )
+
+        if not equipo.mantenimiento:
+            raise EquipoValidationError(
+                f"El equipo '{equipo.nombre}' (secuencial: {equipo.secuencial}) no se encuentra en mantenimiento."
+            )
+
+        equipo.mantenimiento = False
+        return self.repository.update(equipo)

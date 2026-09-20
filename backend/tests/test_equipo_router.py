@@ -231,3 +231,48 @@ def test_endpoint_eliminar_equipo_no_encontrado(mock_service):
     response = client.delete("/api/equipos/404")
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+# =========================================================================
+# Pruebas de Endpoints POST /api/equipos/{id}/sacar-mantenimiento
+# =========================================================================
+
+def test_endpoint_sacar_mantenimiento_exito(mock_service):
+    mock_service.sacar_de_mantenimiento.return_value = Equipo(
+        id=5,
+        id_categoria=2,
+        nombre="Osciloscopio Digital",
+        secuencial="OSC-005",
+        descripcion="Reparado",
+        mantenimiento=False,
+        fecha_creacion=date.today(),
+        activo=True,
+    )
+
+    response = client.post("/api/equipos/5/sacar-mantenimiento")
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["id"] == 5
+    assert data["mantenimiento"] is False
+    mock_service.sacar_de_mantenimiento.assert_called_once_with(5)
+
+
+def test_endpoint_sacar_mantenimiento_no_encontrado(mock_service):
+    mock_service.sacar_de_mantenimiento.side_effect = EquipoNotFoundError(999)
+
+    response = client.post("/api/equipos/999/sacar-mantenimiento")
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert "999" in response.json()["detail"]
+
+
+def test_endpoint_sacar_mantenimiento_validacion_error(mock_service):
+    mock_service.sacar_de_mantenimiento.side_effect = EquipoValidationError(
+        "El equipo 'Osciloscopio' no se encuentra en mantenimiento."
+    )
+
+    response = client.post("/api/equipos/5/sacar-mantenimiento")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "no se encuentra en mantenimiento" in response.json()["detail"]

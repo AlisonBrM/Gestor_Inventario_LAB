@@ -195,6 +195,32 @@ export default function Equipos() {
     }
   };
 
+  // Sacar de mantenimiento
+  const handleSacarMantenimiento = async (id, nombre, secuencial) => {
+    if (!window.confirm(`¿Confirmas marcar el equipo "${nombre}" [${secuencial}] (ID: ${id}) como disponible y sacarlo de mantenimiento?`)) {
+      return;
+    }
+    setMensaje(null);
+
+    try {
+      const res = await fetch(`/api/equipos/${id}/sacar-mantenimiento`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Error al sacar el equipo de mantenimiento');
+      }
+
+      setMensaje({
+        tipo: 'success',
+        texto: `Equipo "${data.nombre}" (${data.secuencial}) marcado como disponible. Mantenimiento finalizado exitosamente.`,
+      });
+      cargarEquipos();
+    } catch (err) {
+      setMensaje({ tipo: 'error', texto: err.message });
+    }
+  };
+
   return (
     <div className="crud-container">
       <h2>Gestión de Equipos de Laboratorio</h2>
@@ -445,6 +471,15 @@ export default function Equipos() {
                       </span>
                     </td>
                     <td className="actions-cell">
+                      {eq.mantenimiento && eq.activo && (
+                        <button
+                          className="btn-sm btn-success"
+                          onClick={() => handleSacarMantenimiento(eq.id, eq.nombre, eq.secuencial)}
+                          title="Sacar de mantenimiento y marcar como disponible"
+                        >
+                          ✅ Disponible
+                        </button>
+                      )}
                       <button
                         className="btn-sm btn-edit"
                         onClick={() => iniciarEdicion(eq)}

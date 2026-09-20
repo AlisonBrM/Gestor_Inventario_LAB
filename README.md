@@ -170,6 +170,7 @@ La aplicación estará disponible en [http://localhost:5173](http://localhost:51
 | `GET` | `/api/equipos` | Query:<br>- `solo_activos=true` (opcional)<br>- `id_categoria={id}` (opcional)<br>- `en_mantenimiento={true/false}` (opcional) | Lista los equipos registrados aplicando los filtros especificados | `200 OK` |
 | `GET` | `/api/equipos/{id}` | Path: `id` (entero) | Retorna los detalles de un equipo | `200 OK`, `404 Not Found` |
 | `PUT` | `/api/equipos/{id}` | Path: `id`, Body JSON: `EquipoUpdate` | Actualiza los datos de un equipo (nombre, descripción, categoría, mantenimiento, activo) | `200 OK`, `400 Bad Request`, `404 Not Found` |
+| `POST` | `/api/equipos/{id}/sacar-mantenimiento` | Path: `id` (entero) | Marca un equipo como disponible cambiando `mantenimiento = False` | `200 OK`, `400 Bad Request`, `404 Not Found` |
 | `DELETE` | `/api/equipos/{id}` | Path: `id` (entero) | Borrado lógico: establece `activo = False` | `200 OK`, `404 Not Found` |
 
 ### Módulo de Personas (`/api/personas`)
@@ -270,6 +271,12 @@ Abre [http://localhost:5173](http://localhost:5173) en el navegador. La aplicaci
   - Puedes desmarcar/marcar **Equipo Activo** para gestionar su reactivación.
 - **Borrado Lógico:**
   - Haz clic en 🗑️ **Desactivar**. El equipo se marcará como `Inactivo` (`activo = false`) preservando su registro en la base de datos.
+- **Sacar Equipo de Mantenimiento (Marcar Disponible):**
+  - Ubica en la tabla cualquier equipo activo que se encuentre con el estado `🔧 En Mantenimiento`.
+  - En la columna de acciones, haz clic en el botón verde **✅ Disponible**.
+  - Confirma la acción en la ventana de confirmación del navegador.
+  - El sistema cambiará inmediatamente su estado a `✅ Operativo` (`mantenimiento = false`), mostrando el mensaje de confirmación exitosa.
+  - Dirígete a la pestaña **📋 Préstamos** y comprueba que el equipo vuelve a estar disponible en el listado para registrar un nuevo préstamo.
 
 #### D. Pruebas del Módulo de Préstamos:
 - Cambia a la pestaña **📋 Préstamos**.

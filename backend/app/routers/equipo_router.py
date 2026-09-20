@@ -139,3 +139,28 @@ def eliminar_equipo(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(err),
         ) from err
+
+
+@router.post(
+    "/{equipo_id}/sacar-mantenimiento",
+    response_model=EquipoResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Sacar un equipo de mantenimiento",
+)
+def sacar_equipo_de_mantenimiento(
+    equipo_id: int,
+    service: EquipoService = Depends(get_equipo_service),
+) -> EquipoResponse:
+    """Marca un equipo como disponible retirándolo del estado de mantenimiento."""
+    try:
+        return service.sacar_de_mantenimiento(equipo_id)
+    except EquipoNotFoundError as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(err),
+        ) from err
+    except EquipoValidationError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(err),
+        ) from err

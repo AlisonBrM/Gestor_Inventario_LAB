@@ -350,3 +350,77 @@ def test_reactivar_equipo(service, mock_equipo_repository):
 
     assert resultado.activo is True
     mock_equipo_repository.update.assert_called_once_with(equipo)
+
+
+# =========================================================================
+# 5. Pruebas de Sacar de Mantenimiento (RN-EQ-MANT-01 a RN-EQ-MANT-04)
+# =========================================================================
+
+def test_sacar_de_mantenimiento_exito(service, mock_equipo_repository):
+    """RN-EQ-MANT-04: Verifica que un equipo en mantenimiento cambie a mantenimiento = False."""
+    equipo = Equipo(
+        id=5,
+        id_categoria=1,
+        nombre="Generador de Señales",
+        secuencial="GEN-01",
+        mantenimiento=True,
+        activo=True,
+    )
+    mock_equipo_repository.get_by_id.return_value = equipo
+    mock_equipo_repository.update.side_effect = lambda eq: eq
+
+    resultado = service.sacar_de_mantenimiento(5)
+
+    assert resultado.id == 5
+    assert resultado.mantenimiento is False
+    mock_equipo_repository.get_by_id.assert_called_once_with(5)
+    mock_equipo_repository.update.assert_called_once_with(equipo)
+
+
+def test_sacar_de_mantenimiento_no_encontrado(service, mock_equipo_repository):
+    """RN-EQ-MANT-01: Lanza EquipoNotFoundError si el equipo no existe."""
+    mock_equipo_repository.get_by_id.return_value = None
+
+    with pytest.raises(EquipoNotFoundError) as exc_info:
+        service.sacar_de_mantenimiento(999)
+
+    assert exc_info.value.equipo_id == 999
+    mock_equipo_repository.update.assert_not_called()
+
+
+def test_sacar_de_mantenimiento_no_estaba_en_mantenimiento(service, mock_equipo_repository):
+    """RN-EQ-MANT-02: Lanza EquipoValidationError si el equipo ya está disponible."""
+    equipo = Equipo(
+        id=6,
+        id_categoria=1,
+        nombre="Multímetro Digital",
+        secuencial="MUL-01",
+        mantenimiento=False,
+        activo=True,
+    )
+    mock_equipo_repository.get_by_id.return_value = equipo
+
+    with pytest.raises(EquipoValidationError) as exc_info:
+        service.sacar_de_mantenimiento(6)
+
+    assert "no se encuentra en mantenimiento" in str(exc_info.value)
+    mock_equipo_repository.update.assert_not_called()
+
+
+def test_sacar_de_mantenimiento_equipo_inactivo(service, mock_equipo_repository):
+    """RN-EQ-MANT-03: Lanza EquipoValidationError si el equipo está inactivo."""
+    equipo = Equipo(
+        id=7,
+        id_categoria=1,
+        nombre="Calibrador",
+        secuencial="CAL-01",
+        mantenimiento=True,
+        activo=False,
+    )
+    mock_equipo_repository.get_by_id.return_value = equipo
+
+    with pytest.raises(EquipoValidationError) as exc_info:
+        service.sacar_de_mantenimiento(7)
+
+    assert "porque se encuentra inactivo" in str(exc_info.value)
+    mock_equipo_repository.update.assert_not_called()

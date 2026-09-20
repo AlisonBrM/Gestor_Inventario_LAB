@@ -30,6 +30,13 @@ export default function Prestamos() {
   const [enviarMantenimiento, setEnviarMantenimiento] = useState(false);
   const [enviandoDevolucion, setEnviandoDevolucion] = useState(false);
 
+  // Formulario de Prórroga
+  const [prestamoProrroga, setPrestamoProrroga] = useState(null);
+  const [nuevaFechaDevolucion, setNuevaFechaDevolucion] = useState('');
+  const [motivoProrroga, setMotivoProrroga] = useState('');
+  const [enviandoProrroga, setEnviandoProrroga] = useState(false);
+
+
   // Cargar opciones para formulario y filtros
   const cargarOpciones = async () => {
     setLoadingDatos(true);
@@ -120,6 +127,8 @@ export default function Prestamos() {
     e.preventDefault();
     setMensaje(null);
     setPrestamoCreado(null);
+    setPrestamoProrroga(null);
+
 
     if (!cedulaPersona.trim()) {
       setMensaje({ tipo: 'error', texto: 'Debes seleccionar o ingresar la cédula del solicitante.' });
@@ -169,6 +178,7 @@ export default function Prestamos() {
   // Iniciar proceso de devolución para un préstamo
   const iniciarDevolucion = (p) => {
     setPrestamoDevolucion(p);
+    setPrestamoProrroga(null);
     setFechaDevolucion(hoyStr);
     setNovedades('');
     setEnviarMantenimiento(false);
@@ -248,6 +258,103 @@ export default function Prestamos() {
       setEnviandoDevolucion(false);
     }
   };
+
+  // Helpers para cálculo de límites de fecha en prórrogas (SUP-07: máximo 6 meses / 180 días)
+  const calcularFechaMaxima = (fechaInicioStr) => {
+    if (!fechaInicioStr) return '';
+    const d = new Date(fechaInicioStr + 'T00:00:00');
+    d.setDate(d.getDate() + 180);
+    return d.toISOString().split('T')[0];
+  };
+
+  const calcularFechaMinimaProrroga = (fechaEsperadaStr) => {
+    if (!fechaEsperadaStr) return '';
+    const d = new Date(fechaEsperadaStr + 'T00:00:00');
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  };
+
+  // Iniciar proceso de prórroga para un préstamo vigente
+  const iniciarProrroga = (p) => {
+    setPrestamoProrroga(p);
+    setPrestamoDevolucion(null);
+    setMensaje(null);
+    setPrestamoCreado(null);
+    setMotivoProrroga('');
+    const fechaMax = calcularFechaMaxima(p.fecha_prestamo);
+    const d = new Date(p.fecha_devolucion_esperada + 'T00:00:00');
+    d.setDate(d.getDate() + 7);
+    const sugerida = d.toISOString().split('T')[0];
+    setNuevaFechaDevolucion(sugerida <= fechaMax ? sugerida : fechaMax);
+  };
+
+  const cancelarProrroga = () => {
+    setPrestamoProrroga(null);
+    setMotivoProrroga('');
+    setNuevaFechaDevolucion('');
+  };
+
+  // Enviar formulario de prórroga
+  const handleRegistrarProrroga = async (e) => {
+    e.preventDefault();
+    setMensaje(null);
+
+    if (!prestamoProrroga) return;
+
+    if (!nuevaFechaDevolucion) {
+      setMensaje({ tipo: 'error', texto: 'Debes seleccionar la nueva fecha esperada de devolución.' });
+      return;
+    }
+
+    if (nuevaFechaDevolucion <= prestamoProrroga.fecha_devolucion_esperada) {
+      setMensaje({
+        tipo: 'error',
+        texto: `La nueva fecha esperada (${nuevaFechaDevolucion}) debe ser posterior a la actual esperada (${prestamoProrroga.fecha_devolucion_esperada}).`,
+      });
+      return;
+    }
+
+    const fechaMax = calcularFechaMaxima(prestamoProrroga.fecha_prestamo);
+    if (nuevaFechaDevolucion > fechaMax) {
+      setMensaje({
+        tipo: 'error',
+        texto: `La nueva fecha supera el límite máximo permitido de 6 meses (180 días): ${fechaMax}.`,
+      });
+      return;
+    }
+
+    const payload = {
+      nueva_fecha_devolucion_esperada: nuevaFechaDevolucion,
+      motivo: motivoProrroga.trim() || null,
+    };
+
+    setEnviandoProrroga(true);
+    try {
+      const res = await fetch(`/api/prestamos/${prestamoProrroga.id}/prorroga`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.detail || 'Ocurrió un error al procesar la prórroga.');
+      }
+
+      setMensaje({
+        tipo: 'success',
+        texto: `¡Préstamo #${prestamoProrroga.id} prorrogado exitosamente! Nueva fecha de devolución esperada: ${data.fecha_devolucion_esperada}.`,
+      });
+      setPrestamoProrroga(null);
+      cargarPrestamos();
+    } catch (err) {
+      setMensaje({ tipo: 'error', texto: err.message || 'Error de conexión al procesar la prórroga.' });
+    } finally {
+      setEnviandoProrroga(false);
+    }
+  };
+
 
   return (
     <div className="modulo-prestamos">
@@ -504,7 +611,103 @@ export default function Prestamos() {
         </div>
       )}
 
+      {/* Formulario / Tarjeta para Prorrogar Préstamo */}
+      {prestamoProrroga && (
+        <div className="card edit-card" style={{ borderColor: '#d97706', backgroundColor: '#fffbeb' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, color: '#b45309' }}>
+              ⏱️ Prorrogar Préstamo #{prestamoProrroga.id}
+            </h3>
+            <span className="badge badge-active" style={{ backgroundColor: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}>
+              Prórroga de Plazo
+            </span>
+          </div>
+
+          <p className="subtitle" style={{ fontSize: '0.85rem', marginTop: '0.25rem', marginBottom: '0.75rem' }}>
+            Extiende la fecha esperada de devolución del equipo dentro del límite permitido de 6 meses (180 días calendario) desde la fecha de préstamo.
+          </p>
+
+          <div className="form-grid" style={{ marginBottom: '1rem', backgroundColor: '#ffffff', padding: '0.75rem', borderRadius: '6px', border: '1px solid #fde68a' }}>
+            <div>
+              <strong>Solicitante:</strong>
+              <div>{prestamoProrroga.nombre_persona || 'N/A'} (C.C. {prestamoProrroga.cedula_persona})</div>
+            </div>
+            <div>
+              <strong>Equipo:</strong>
+              <div>{prestamoProrroga.nombre_equipo} (Sec: {prestamoProrroga.secuencial_equipo || 'S/N'})</div>
+            </div>
+            <div>
+              <strong>Fecha Inicio Préstamo:</strong>
+              <div>{prestamoProrroga.fecha_prestamo}</div>
+            </div>
+            <div>
+              <strong>Fecha Esperada Actual:</strong>
+              <div style={{ color: '#b45309', fontWeight: 600 }}>{prestamoProrroga.fecha_devolucion_esperada}</div>
+            </div>
+            <div className="full-width" style={{ marginTop: '0.25rem', fontSize: '0.85rem', color: '#92400e', backgroundColor: '#fef9c3', padding: '0.5rem', borderRadius: '4px' }}>
+              ℹ️ <strong>Fecha máxima permitida (6 meses / 180 días):</strong>{' '}
+              <span style={{ fontWeight: 600 }}>{calcularFechaMaxima(prestamoProrroga.fecha_prestamo)}</span>
+            </div>
+          </div>
+
+          <form onSubmit={handleRegistrarProrroga}>
+            <div className="form-grid">
+              <div className="form-group">
+                <label htmlFor="input-nueva-fecha">Nueva Fecha de Devolución Esperada:</label>
+                <input
+                  id="input-nueva-fecha"
+                  type="date"
+                  value={nuevaFechaDevolucion}
+                  min={calcularFechaMinimaProrroga(prestamoProrroga.fecha_devolucion_esperada)}
+                  max={calcularFechaMaxima(prestamoProrroga.fecha_prestamo)}
+                  onChange={(e) => setNuevaFechaDevolucion(e.target.value)}
+                  disabled={enviandoProrroga}
+                  required
+                />
+                <small style={{ color: '#64748b' }}>
+                  Rango válido: del {calcularFechaMinimaProrroga(prestamoProrroga.fecha_devolucion_esperada)} al {calcularFechaMaxima(prestamoProrroga.fecha_prestamo)}.
+                </small>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="input-motivo-prorroga">Motivo / Justificación (Opcional):</label>
+                <input
+                  id="input-motivo-prorroga"
+                  type="text"
+                  placeholder="Ej. Continuación de trabajo de grado o prácticas de laboratorio"
+                  value={motivoProrroga}
+                  onChange={(e) => setMotivoProrroga(e.target.value)}
+                  disabled={enviandoProrroga}
+                  maxLength={255}
+                />
+                <small style={{ color: '#64748b' }}>Justificación administrativa de la extensión.</small>
+              </div>
+            </div>
+
+            <div className="form-actions" style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={cancelarProrroga}
+                disabled={enviandoProrroga}
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={enviandoProrroga}
+                style={{ backgroundColor: '#d97706', borderColor: '#b45309' }}
+              >
+                {enviandoProrroga ? 'Prorrogando...' : '✔ Confirmar Prórroga'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Listado y Filtros de Préstamos */}
+
       <div className="card table-card" style={{ marginTop: '1.5rem' }}>
         <div className="table-header">
           <h3>📋 Historial de Préstamos ({prestamos.length})</h3>
@@ -629,15 +832,29 @@ export default function Prestamos() {
                     </td>
                     <td className="actions-cell">
                       {!p.devuelto ? (
-                        <button
-                          type="button"
-                          className="btn-primary btn-sm"
-                          onClick={() => iniciarDevolucion(p)}
-                          title="Registrar devolución del equipo"
-                        >
-                          📥 Devolver Equipo
-                        </button>
+                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="btn-primary btn-sm"
+                            onClick={() => iniciarDevolucion(p)}
+                            title="Registrar devolución del equipo"
+                          >
+                            📥 Devolver
+                          </button>
+                          {p.estado === 'vigente' && (
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              onClick={() => iniciarProrroga(p)}
+                              title="Prorrogar fecha esperada de devolución"
+                              style={{ borderColor: '#d97706', color: '#b45309' }}
+                            >
+                              ⏱️ Prorrogar
+                            </button>
+                          )}
+                        </div>
                       ) : (
+
                         <div style={{ fontSize: '0.85rem' }}>
                           <div>
                             <strong>Devuelto:</strong> {p.devolucion?.fecha_devolucion || 'Sí'}

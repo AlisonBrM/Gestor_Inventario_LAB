@@ -99,3 +99,10 @@ class PrestamoRepository:
         return self.db.execute(
             select(Devolucion).where(Devolucion.id_prestamo == prestamo_id)
         ).scalar_one_or_none()
+
+    def update(self, prestamo: Prestamo) -> Prestamo:
+        """Guarda los cambios efectuados sobre un préstamo existente."""
+        self.db.commit()
+        self.db.refresh(prestamo)
+        return prestamo
+

@@ -188,6 +188,8 @@ La aplicación estará disponible en [http://localhost:5173](http://localhost:51
 | `GET` | `/api/prestamos` | Query:<br>- `id_categoria={id}` (opcional)<br>- `fecha_desde={YYYY-MM-DD}` (opcional)<br>- `fecha_hasta={YYYY-MM-DD}` (opcional)<br>- `estado={vigente/vencido}` (opcional) | Lista todos los préstamos registrados aplicando los filtros opcionales de categoría, rango de fechas y estado | `200 OK`, `400 Bad Request` |
 | `GET` | `/api/prestamos/{id}` | Path: `id` (entero) | Retorna los datos detallados de un préstamo por su ID | `200 OK`, `404 Not Found` |
 | `POST` | `/api/prestamos/{id}/devolucion` | Path: `id`, Body JSON: `DevolucionCreate` | Registra la devolución efectiva del equipo prestado, actualiza las novedades, define si pasa a mantenimiento y cambia el estado del préstamo a devuelto | `200 OK`, `400 Bad Request`, `404 Not Found`, `422 Unprocessable Content` |
+| `POST` | `/api/prestamos/{id}/prorroga` | Path: `id`, Body JSON: `PrestamoProrrogaCreate` | Extiende la fecha esperada de devolución de un préstamo vigente validando que no exceda 180 días calendario desde su inicio | `200 OK`, `400 Bad Request`, `404 Not Found`, `422 Unprocessable Content` |
+
 
 ---
 
@@ -322,3 +324,20 @@ Abre [http://localhost:5173](http://localhost:5173) en el navegador. La aplicaci
   - **Validación de reglas adicionales de devolución:**
     - **Préstamo ya devuelto:** Una vez devuelto un equipo, el botón de devolución se sustituye por la información de entrega y no es posible duplicar la devolución (RN-DEV-02).
     - **Rango de fechas:** Si se intenta colocar una fecha futura o anterior a la fecha en que se inició el préstamo, el sistema rechazará la devolución (RN-DEV-03).
+
+- **Prorrogar un Préstamo (Extensión de plazo hasta 6 meses / 180 días):**
+  - En la tabla **Historial de Préstamos**, ubica cualquier préstamo con estado `🟢 Vigente`.
+  - En la columna **Acciones / Devolución**, haz clic en el botón **⏱️ Prorrogar**.
+  - Se desplegará la tarjeta de prórroga (**⏱️ Prorrogar Préstamo #X**) con la información del solicitante, equipo, fecha de préstamo, fecha esperada actual y la **Fecha máxima permitida (6 meses / 180 días calendario desde la fecha del préstamo)** calculada automáticamente.
+  - **Prórroga Exitosa:**
+    - Selecciona una nueva fecha en el selector dentro del rango permitido (posterior a la actual esperada y menor o igual a la fecha límite de 180 días).
+    - Opcionalmente añade un motivo o justificación (ej. *"Ampliación de prácticas de laboratorio"*).
+    - Haz clic en **✔ Confirmar Prórroga**.
+    - El sistema mostrará un mensaje de confirmación exitosa y la tabla actualizará de inmediato la columna **Fecha Devolución Esperada** con el nuevo límite.
+  - **Validación de Regla de Negocio (Límite de 6 meses / 180 días):**
+    - Intenta ingresar una fecha posterior al límite máximo de 180 días desde el inicio del préstamo. El selector y el backend rechazarán la operación indicando: *"La fecha máxima permitida para prorrogar este préstamo es YYYY-MM-DD (máximo 180 días desde el inicio del préstamo)."*
+  - **Validación de Regla de Negocio (Fecha debe ser posterior a la actual):**
+    - Intenta seleccionar una fecha igual o anterior a la fecha esperada actual. El sistema mostrará: *"La nueva fecha esperada de devolución (...) debe ser posterior a la fecha actual esperada (...)."*
+  - **Restricción de Estado (Solo vigentes):**
+    - Los préstamos devueltos (`⚪ Devuelto`) no muestran botón de prórroga.
+    - Los préstamos vencidos (`🔴 Vencido`) no permiten solicitar prórroga, protegiendo la regla de que solo se prorrogan préstamos vigentes.

@@ -12,7 +12,8 @@ from app.repositories.equipo_repository import EquipoRepository
 from app.repositories.persona_repository import PersonaRepository
 from app.repositories.prestamo_repository import PrestamoRepository
 from app.schemas.devolucion import DevolucionCreate
-from app.schemas.prestamo import PrestamoCreate
+from app.schemas.prestamo import PrestamoCreate, PrestamoProrrogaCreate
+
 from app.services.prestamo_service import (
     PrestamoNotFoundError,
     PrestamoService,
@@ -821,3 +822,173 @@ def test_registrar_devolucion_equipo_no_encontrado_lanza_error(
         service.registrar_devolucion(8, datos)
 
     assert "no fue encontrado" in str(exc_info.value)
+
+
+# =========================================================================
+# 5. Pruebas de Prórroga de Préstamo (RN-PRORR-01 a RN-PRORR-06)
+# =========================================================================
+
+def test_prorrogar_prestamo_exitoso(service, mock_prestamo_repo):
+    """RN-PRORR-06: Prorroga exitosa actualiza fecha_devolucion_esperada y persiste."""
+    hoy = date.today()
+    prestamo = Prestamo(
+        id=10,
+        cedula_persona="1001234567",
+        id_equipo=1,
+        fecha_prestamo=hoy - timedelta(days=10),
+        fecha_devolucion_esperada=hoy + timedelta(days=5),
+    )
+    mock_prestamo_repo.get_by_id.return_value = prestamo
+    mock_prestamo_repo.update.side_effect = lambda p: p
+
+    nueva_fecha = hoy + timedelta(days=25)
+    datos = PrestamoProrrogaCreate(
+        nueva_fecha_devolucion_esperada=nueva_fecha,
+        motivo="Ampliación de pruebas de laboratorio",
+    )
+
+    resultado = service.prorrogar_prestamo(10, datos)
+
+    assert resultado.fecha_devolucion_esperada == nueva_fecha
+    mock_prestamo_repo.update.assert_called_once_with(prestamo)
+
+
+def test_prorrogar_prestamo_limite_exacto_180_dias(service, mock_prestamo_repo):
+    """RN-PRORR-05: Se permite prorrogar exactamente hasta los 180 días desde fecha_prestamo."""
+    hoy = date.today()
+    fecha_inicio = hoy - timedelta(days=30)
+    prestamo = Prestamo(
+        id=11,
+        cedula_persona="1001234567",
+        id_equipo=1,
+        fecha_prestamo=fecha_inicio,
+        fecha_devolucion_esperada=hoy + timedelta(days=10),
+    )
+    mock_prestamo_repo.get_by_id.return_value = prestamo
+    mock_prestamo_repo.update.side_effect = lambda p: p
+
+    nueva_fecha_limite = fecha_inicio + timedelta(days=180)
+    datos = PrestamoProrrogaCreate(
+        nueva_fecha_devolucion_esperada=nueva_fecha_limite,
+        motivo=None,
+    )
+
+    resultado = service.prorrogar_prestamo(11, datos)
+
+    assert resultado.fecha_devolucion_esperada == nueva_fecha_limite
+
+
+def test_prorrogar_prestamo_inexistente_lanza_error(service, mock_prestamo_repo):
+    """RN-PRORR-01: Lanza PrestamoNotFoundError si el préstamo no existe."""
+    mock_prestamo_repo.get_by_id.return_value = None
+
+    datos = PrestamoProrrogaCreate(
+        nueva_fecha_devolucion_esperada=date.today() + timedelta(days=10),
+    )
+
+    with pytest.raises(PrestamoNotFoundError) as exc_info:
+        service.prorrogar_prestamo(999, datos)
+
+    assert exc_info.value.identificador == 999
+
+
+def test_prorrogar_prestamo_ya_devuelto_lanza_error(service, mock_prestamo_repo):
+    """RN-PRORR-02: Lanza PrestamoValidationError si el préstamo ya fue devuelto."""
+    hoy = date.today()
+    prestamo = Prestamo(
+        id=12,
+        cedula_persona="1001234567",
+        id_equipo=1,
+        fecha_prestamo=hoy - timedelta(days=10),
+        fecha_devolucion_esperada=hoy + timedelta(days=5),
+    )
+    prestamo.devolucion = Devolucion(
+        id_prestamo=12,
+        fecha_devolucion=hoy - timedelta(days=2),
+    )
+    mock_prestamo_repo.get_by_id.return_value = prestamo
+
+    datos = PrestamoProrrogaCreate(
+        nueva_fecha_devolucion_esperada=hoy + timedelta(days=15),
+    )
+
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.prorrogar_prestamo(12, datos)
+
+    assert "ya fue devuelto previamente" in str(exc_info.value)
+
+
+def test_prorrogar_prestamo_vencido_lanza_error(service, mock_prestamo_repo):
+    """RN-PRORR-03: Lanza PrestamoValidationError si el préstamo ya se encuentra vencido."""
+    hoy = date.today()
+    prestamo = Prestamo(
+        id=13,
+        cedula_persona="1001234567",
+        id_equipo=1,
+        fecha_prestamo=hoy - timedelta(days=20),
+        fecha_devolucion_esperada=hoy - timedelta(days=1),  # Vencido ayer
+    )
+    mock_prestamo_repo.get_by_id.return_value = prestamo
+
+    datos = PrestamoProrrogaCreate(
+        nueva_fecha_devolucion_esperada=hoy + timedelta(days=10),
+    )
+
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.prorrogar_prestamo(13, datos)
+
+    assert "se encuentra vencido" in str(exc_info.value)
+
+
+def test_prorrogar_prestamo_fecha_igual_o_anterior_lanza_error(service, mock_prestamo_repo):
+    """RN-PRORR-04: Lanza PrestamoValidationError si nueva fecha es <= actual esperada."""
+    hoy = date.today()
+    prestamo = Prestamo(
+        id=14,
+        cedula_persona="1001234567",
+        id_equipo=1,
+        fecha_prestamo=hoy - timedelta(days=5),
+        fecha_devolucion_esperada=hoy + timedelta(days=10),
+    )
+    mock_prestamo_repo.get_by_id.return_value = prestamo
+
+    # Caso 1: Misma fecha
+    datos_igual = PrestamoProrrogaCreate(
+        nueva_fecha_devolucion_esperada=hoy + timedelta(days=10),
+    )
+    with pytest.raises(PrestamoValidationError) as exc_info1:
+        service.prorrogar_prestamo(14, datos_igual)
+    assert "debe ser posterior" in str(exc_info1.value)
+
+    # Caso 2: Fecha anterior
+    datos_anterior = PrestamoProrrogaCreate(
+        nueva_fecha_devolucion_esperada=hoy + timedelta(days=8),
+    )
+    with pytest.raises(PrestamoValidationError) as exc_info2:
+        service.prorrogar_prestamo(14, datos_anterior)
+    assert "debe ser posterior" in str(exc_info2.value)
+
+
+def test_prorrogar_prestamo_excede_180_dias_lanza_error(service, mock_prestamo_repo):
+    """RN-PRORR-05: Lanza PrestamoValidationError si supera los 180 días desde fecha_prestamo."""
+    hoy = date.today()
+    fecha_inicio = hoy - timedelta(days=10)
+    prestamo = Prestamo(
+        id=15,
+        cedula_persona="1001234567",
+        id_equipo=1,
+        fecha_prestamo=fecha_inicio,
+        fecha_devolucion_esperada=hoy + timedelta(days=20),
+    )
+    mock_prestamo_repo.get_by_id.return_value = prestamo
+
+    # 181 días desde fecha_prestamo
+    datos_exceso = PrestamoProrrogaCreate(
+        nueva_fecha_devolucion_esperada=fecha_inicio + timedelta(days=181),
+    )
+
+    with pytest.raises(PrestamoValidationError) as exc_info:
+        service.prorrogar_prestamo(15, datos_exceso)
+
+    assert "máximo 180 días" in str(exc_info.value)
+

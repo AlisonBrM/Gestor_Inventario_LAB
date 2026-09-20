@@ -9,7 +9,12 @@ from app.repositories.equipo_repository import EquipoRepository
 from app.repositories.persona_repository import PersonaRepository
 from app.repositories.prestamo_repository import PrestamoRepository
 from app.schemas.devolucion import DevolucionCreate
-from app.schemas.prestamo import PrestamoCreate, PrestamoResponse
+from app.schemas.prestamo import (
+    PrestamoCreate,
+    PrestamoProrrogaCreate,
+    PrestamoResponse,
+)
+
 from app.services.prestamo_service import (
     PrestamoNotFoundError,
     PrestamoService,
@@ -142,3 +147,30 @@ def registrar_devolucion(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(err),
         ) from err
+
+
+@router.post(
+    "/{id}/prorroga",
+    response_model=PrestamoResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Prorrogar un préstamo",
+)
+def prorrogar_prestamo(
+    id: int,
+    datos: PrestamoProrrogaCreate,
+    service: PrestamoService = Depends(get_prestamo_service),
+) -> PrestamoResponse:
+    """Extiende la fecha esperada de devolución de un préstamo vigente aplicando las reglas de negocio."""
+    try:
+        return service.prorrogar_prestamo(id, datos)
+    except PrestamoNotFoundError as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(err),
+        ) from err
+    except PrestamoValidationError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(err),
+        ) from err
+

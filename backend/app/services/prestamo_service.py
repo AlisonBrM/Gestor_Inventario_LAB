@@ -8,7 +8,8 @@ from app.repositories.equipo_repository import EquipoRepository
 from app.repositories.persona_repository import PersonaRepository
 from app.repositories.prestamo_repository import PrestamoRepository
 from app.schemas.devolucion import DevolucionCreate
-from app.schemas.prestamo import PrestamoCreate
+from app.schemas.prestamo import PrestamoCreate, PrestamoProrrogaCreate
+
 
 
 class PrestamoNotFoundError(Exception):
@@ -253,3 +254,53 @@ class PrestamoService:
         # Actualizar relación en memoria para respuesta inmediata
         prestamo.devolucion = devolucion
         return prestamo
+
+    def prorrogar_prestamo(
+        self, prestamo_id: int, datos: PrestamoProrrogaCreate
+    ) -> Prestamo:
+        """Prorroga la fecha de devolución esperada de un préstamo vigente.
+
+        Reglas aplicadas:
+        - RN-PRORR-01: El préstamo debe existir (o lanza PrestamoNotFoundError).
+        - RN-PRORR-02: El préstamo no debe haber sido devuelto (o lanza PrestamoValidationError).
+        - RN-PRORR-03: Solo se pueden prorrogar préstamos vigentes (fecha esperada actual >= hoy).
+        - RN-PRORR-04: La nueva fecha esperada debe ser estrictamente posterior a la actual fecha esperada.
+        - RN-PRORR-05: La duración total del préstamo no puede superar los 180 días contados desde fecha_prestamo.
+        - RN-PRORR-06: Si es válido, se actualiza fecha_devolucion_esperada y se persiste.
+        """
+        # RN-PRORR-01: Validar existencia del préstamo
+        prestamo = self.prestamo_repository.get_by_id(prestamo_id)
+        if not prestamo:
+            raise PrestamoNotFoundError(prestamo_id)
+
+        # RN-PRORR-02: Validar que no haya sido devuelto previamente
+        if prestamo.devuelto:
+            raise PrestamoValidationError(
+                f"El préstamo #{prestamo_id} ya fue devuelto previamente y no puede ser prorrogado."
+            )
+
+        # RN-PRORR-03: Validar que el préstamo se encuentre vigente (no vencido)
+        if prestamo.fecha_devolucion_esperada < date.today():
+            raise PrestamoValidationError(
+                f"El préstamo #{prestamo_id} se encuentra vencido. Solo se pueden prorrogar préstamos vigentes."
+            )
+
+        # RN-PRORR-04: La nueva fecha debe ser estrictamente posterior a la actual
+        if datos.nueva_fecha_devolucion_esperada <= prestamo.fecha_devolucion_esperada:
+            raise PrestamoValidationError(
+                f"La nueva fecha esperada de devolución ({datos.nueva_fecha_devolucion_esperada}) "
+                f"debe ser posterior a la fecha actual esperada ({prestamo.fecha_devolucion_esperada})."
+            )
+
+        # RN-PRORR-05: No superar los 180 días calendario desde fecha_prestamo (6 meses)
+        fecha_maxima = prestamo.fecha_prestamo + timedelta(days=180)
+        if datos.nueva_fecha_devolucion_esperada > fecha_maxima:
+            raise PrestamoValidationError(
+                f"La fecha máxima permitida para prorrogar este préstamo es {fecha_maxima} "
+                "(máximo 180 días desde el inicio del préstamo)."
+            )
+
+        # RN-PRORR-06: Actualizar y persistir
+        prestamo.fecha_devolucion_esperada = datos.nueva_fecha_devolucion_esperada
+        return self.prestamo_repository.update(prestamo)
+

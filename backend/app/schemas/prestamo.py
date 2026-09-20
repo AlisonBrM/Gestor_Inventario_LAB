@@ -34,6 +34,23 @@ class PrestamoCreate(BaseModel):
         return trimmed
 
 
+class PrestamoProrrogaCreate(BaseModel):
+    """Esquema para solicitar la prórroga de un préstamo vigente."""
+
+    nueva_fecha_devolucion_esperada: date = Field(
+        ...,
+        description="Nueva fecha esperada de devolución del equipo",
+        examples=["2026-10-15"],
+    )
+    motivo: Optional[str] = Field(
+        None,
+        max_length=255,
+        description="Motivo o justificación opcional de la prórroga",
+        examples=["Continuación de práctica de laboratorio"],
+    )
+
+
+
 from app.schemas.devolucion import DevolucionResponse
 
 

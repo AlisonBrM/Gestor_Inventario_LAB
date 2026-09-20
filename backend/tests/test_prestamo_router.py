@@ -279,3 +279,77 @@ def test_endpoint_registrar_devolucion_400_error_validacion(mock_service):
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "Debe registrar las novedades" in response.json()["detail"]
+
+
+# =========================================================================
+# Pruebas del Endpoint POST /api/prestamos/{id}/prorroga
+# =========================================================================
+
+def test_endpoint_prorrogar_prestamo_exito(mock_service):
+    """Verifica que POST /api/prestamos/{id}/prorroga retorne 200 y el préstamo actualizado."""
+    hoy = date.today()
+    nueva_fecha = hoy + timedelta(days=20)
+
+    prestamo_mock = Prestamo(
+        id=7,
+        cedula_persona="1001234567",
+        id_equipo=3,
+        fecha_prestamo=hoy - timedelta(days=5),
+        fecha_devolucion_esperada=nueva_fecha,
+    )
+    mock_service.prorrogar_prestamo.return_value = prestamo_mock
+
+    payload = {
+        "nueva_fecha_devolucion_esperada": str(nueva_fecha),
+        "motivo": "Necesidad de extender pruebas de laboratorio",
+    }
+    response = client.post("/api/prestamos/7/prorroga", json=payload)
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["id"] == 7
+    assert data["fecha_devolucion_esperada"] == str(nueva_fecha)
+    mock_service.prorrogar_prestamo.assert_called_once()
+
+
+def test_endpoint_prorrogar_prestamo_404_no_encontrado(mock_service):
+    """Verifica que retorne 404 si el préstamo no existe."""
+    mock_service.prorrogar_prestamo.side_effect = PrestamoNotFoundError(88)
+
+    payload = {
+        "nueva_fecha_devolucion_esperada": str(date.today() + timedelta(days=10)),
+    }
+    response = client.post("/api/prestamos/88/prorroga", json=payload)
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert "88" in response.json()["detail"]
+
+
+def test_endpoint_prorrogar_prestamo_400_error_validacion(mock_service):
+    """Verifica que retorne 400 Bad Request si falla alguna regla de prórroga."""
+    mock_service.prorrogar_prestamo.side_effect = PrestamoValidationError(
+        "El préstamo #9 se encuentra vencido. Solo se pueden prorrogar préstamos vigentes."
+    )
+
+    payload = {
+        "nueva_fecha_devolucion_esperada": str(date.today() + timedelta(days=10)),
+    }
+    response = client.post("/api/prestamos/9/prorroga", json=payload)
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "se encuentra vencido" in response.json()["detail"]
+
+
+def test_endpoint_prorrogar_prestamo_422_validacion_pydantic():
+    """Verifica que retorne 422 si falta el campo obligatorio o la fecha es inválida."""
+    # Falta el campo obligatorio nueva_fecha_devolucion_esperada
+    response = client.post("/api/prestamos/1/prorroga", json={"motivo": "Incompleto"})
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+    # Formato de fecha inválido
+    response_fecha_invalida = client.post(
+        "/api/prestamos/1/prorroga",
+        json={"nueva_fecha_devolucion_esperada": "fecha-no-valida"},
+    )
+    assert response_fecha_invalida.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
